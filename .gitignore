@@ -1,0 +1,8 @@
+build
+libs/*
+bin/*
+.cache/*
+
+.DS_Store
+
+compile_commands.json
