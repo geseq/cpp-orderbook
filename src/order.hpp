@@ -3,9 +3,12 @@
 
 #include "types.hpp"
 
-class OrderQueue;
+namespace orderbook {
 
-class Order {
+class OrderQueue;
+class PriceLevel;
+
+struct Order {
     OrderId id_;
     Decimal qty_;
     Decimal price_;
@@ -17,19 +20,24 @@ class Order {
     std::shared_ptr<Order> next_ = nullptr;
     std::shared_ptr<OrderQueue> queue_ = nullptr;
 
-   public:
-    Order(Decimal id, Decimal qty, Decimal price, Type type, Flag flag)
-        : id_(id), qty_(qty), price_(price), type_(type), flag_(flag) {
-        trig_price_ = 0;
-    };
+    Order(Decimal id, Decimal qty, Decimal price, Type type, Flag flag) : id_(id), qty_(qty), price_(price), type_(type), flag_(flag) { trig_price_ = 0; };
 
-    Order(OrderId id, Decimal qty, Decimal price, Decimal trig_price, Type type,
-          Flag flag)
-        : id_(id),
-          qty_(qty),
-          price_(price),
-          trig_price_(trig_price),
-          type_(type),
-          flag_(flag){};
+    Order(OrderId id, Decimal qty, Decimal price, Decimal trig_price, Type type, Flag flag)
+        : id_(id), qty_(qty), price_(price), trig_price_(trig_price), type_(type), flag_(flag){};
+
+    Decimal getPrice(PriceType pt);
+    Decimal getQty();
 };
+
+Decimal Order::getPrice(PriceType pt) {
+    if (pt == TrigPrice) {
+        return trig_price_;
+    }
+
+    return price_;
+}
+
+Decimal Order::getQty() { return qty_; }
+
+}  // namespace orderbook
 

@@ -1,7 +1,8 @@
 #include <cstdint>
 
+namespace orderbook {
+
 using Flag = uint8_t;
-using Side = uint8_t;
 using Decimal = uint64_t;
 using OrderId = uint64_t;
 
@@ -9,6 +10,8 @@ enum Type : uint8_t {
     Limit,
     Market,
 };
+
+enum Side : uint8_t { Buy, Sell };
 
 enum MsgType : uint8_t { MsgCreateOrder, MsgCancelOrder };
 
@@ -36,3 +39,5 @@ enum Error : uint16_t {
     ErrInsufficientQty,
     ErrNoMatching,
 };
+
+}  // namespace orderbook
