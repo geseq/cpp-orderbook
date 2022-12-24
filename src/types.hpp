@@ -2,7 +2,6 @@
 
 namespace orderbook {
 
-using Flag = uint8_t;
 using Decimal = uint64_t;
 using OrderId = uint64_t;
 
@@ -38,6 +37,16 @@ enum Error : uint16_t {
     ErrOrderNotExists,
     ErrInsufficientQty,
     ErrNoMatching,
+};
+
+enum Flag : uint8_t { 
+    None = 0,
+    IoC = 1,
+    AoN = 2,
+    FoK = 4,
+    StopLoss = 8,
+    TakeProfit = 16,
+    Snapshot = 32 
 };
 
 }  // namespace orderbook

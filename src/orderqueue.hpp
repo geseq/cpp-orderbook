@@ -29,20 +29,20 @@ auto OrderQueue::price() { return price_; }
 auto OrderQueue::len() {return size_;}
 
 auto OrderQueue::remove(const std::shared_ptr<Order>& o) {
-    total_qty_ -= o->getQty();
-    auto prev = o->prev_;
-    auto next = o->next_;
+    total_qty_ -= o->qty;
+    auto prev = o->prev;
+    auto next = o->next;
 
     if (prev != nullptr) {
-        prev->next_ = next;
+        prev->next = next;
     }
 
     if (next != nullptr) {
-        next->prev_ = prev;
+        next->prev = prev;
     }
 
-    o->next_ = nullptr;
-    o->prev_ = nullptr;
+    o->next = nullptr;
+    o->prev = nullptr;
 
     --size_;
 
