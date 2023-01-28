@@ -39,14 +39,14 @@ enum Error : uint16_t {
     ErrNoMatching,
 };
 
-enum Flag : uint8_t { 
-    None = 0,
-    IoC = 1,
-    AoN = 2,
-    FoK = 4,
-    StopLoss = 8,
-    TakeProfit = 16,
-    Snapshot = 32 
+enum Flag : uint8_t { None = 0, IoC = 1, AoN = 2, FoK = 4, StopLoss = 8, TakeProfit = 16, Snapshot = 32 };
+
+class Notification {
+   public:
+    virtual void putOrder(MsgType msgtype, OrderStatus status, uint64_t id, Decimal qty, Error err) {}
+    virtual void putOrder(MsgType msgtype, OrderStatus status, uint64_t id, Decimal qty) {}
+
+    virtual void putTrade(uint64_t mOrderId, uint64_t tOrderId, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {}
 };
 
 }  // namespace orderbook

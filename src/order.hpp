@@ -6,7 +6,6 @@
 namespace orderbook {
 
 class OrderQueue;
-class PriceLevel;
 
 struct Order {
     OrderId id;
@@ -15,18 +14,21 @@ struct Order {
     Decimal trig_price;
     Type type;
     Flag flag;
+    Side side;
 
     std::shared_ptr<Order> prev = nullptr;
     std::shared_ptr<Order> next = nullptr;
     std::shared_ptr<OrderQueue> queue = nullptr;
 
-    Order(Decimal id, Decimal qty, Decimal price, Type type, Flag flag) : id(id), qty(qty), price(price), type(type), flag(flag) { trig_price = 0; };
+    Order(Decimal id, Decimal qty, Decimal price, Type type, Side side, Flag flag) : id(id), qty(qty), price(price), type(type), side(side), flag(flag) {
+        trig_price = 0;
+    };
 
-    Order(OrderId id, Decimal qty, Decimal price, Decimal trig_price, Type type, Flag flag)
-        : id(id), qty(qty), price(price), trig_price(trig_price), type(type), flag(flag){};
+    Order(OrderId id, Decimal qty, Decimal price, Decimal trig_price, Type type, Side side, Flag flag)
+        : id(id), qty(qty), price(price), trig_price(trig_price), type(type), side(side), flag(flag){};
 
     Decimal getPrice(PriceType pt);
-    Decimal getQty();
+    void release();
 };
 
 Decimal Order::getPrice(PriceType pt) {
@@ -37,7 +39,9 @@ Decimal Order::getPrice(PriceType pt) {
     return price;
 }
 
-Decimal Order::getQty() { return qty; }
+void release() {
+    // TODO: put back in pool
+}
 
 }  // namespace orderbook
 
