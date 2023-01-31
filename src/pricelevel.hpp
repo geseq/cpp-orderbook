@@ -1,5 +1,9 @@
+#include <functional>
 #include <map>
 
+#include "boost/intrusive/intrusive_fwd.hpp"
+#include "boost/intrusive/list.hpp"
+#include "boost/intrusive/rbtree.hpp"
 #include "orderqueue.hpp"
 
 namespace orderbook {
@@ -12,13 +16,20 @@ class Compare {
     bool GreaterThanOrEqual(Decimal price);
 };
 
+using CmpGreater = boost::intrusive::compare<std::greater<>>;
+using CmpLess = boost::intrusive::compare<std::less<>>;
+
+using OrderList = boost::intrusive::list<Order>;
+
+template <class CompareType>
 class PriceLevel {
-    std::map<Decimal, std::shared_ptr<OrderQueue>> price_tree_;
+    boost::intrusive::rbtree<OrderQueue, CompareType> price_tree_;
 
     PriceType price_type_;
     Decimal volume_ = 0;
     uint64_t num_orders_ = 0;
     uint64_t depth_ = 0;
+    OrderList list_;
 
     std::shared_ptr<OrderQueue> getMinPriceQueue();
     std::shared_ptr<OrderQueue> getMaxPriceQueue();

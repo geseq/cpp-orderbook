@@ -14,7 +14,16 @@ set(CMAKE_USE_PTHREADS_INIT ON)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 
 set(PROJECT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+
+
+add_executable (main main.cpp)
+
 include(cmake/CPM.cmake)
 CPMUsePackageLock(package-lock.cmake)
 
-add_executable (main main.cpp)
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_MULTITHREADED ON)
+set(Boost_USE_STATIC_RUNTIME OFF)
+CPMAddPackage( NAME Boost VERSION 1.80.0 GITHUB_REPOSITORY "boostorg/boost" GIT_TAG "boost-1.80.0")
+
+target_link_libraries(main PRIVATE Boost::intrusive)

@@ -1,19 +1,20 @@
 #include <map>
 
+#include "boost/intrusive/rbtree.hpp"
 #include "pricelevel.hpp"
 
 namespace orderbook {
 
-using OrderMap = std::map<OrderId, std::shared_ptr<Order>>;
+using OrderMap = boost::intrusive::rbtree<Order>;
 
 class OrderBook {
    public:
     OrderBook(Notification n)
         : notification_(std::move(n)),
-          bids_(PriceLevel(BidPrice)),
-          asks_(PriceLevel(AskPrice)),
-          trigger_over_(PriceLevel(TrigPrice)),
-          trigger_under_(PriceLevel(TrigPrice)),
+          bids_(PriceLevel<CmpGreater>(BidPrice)),
+          asks_(PriceLevel<CmpLess>(AskPrice)),
+          trigger_over_(PriceLevel<CmpGreater>(TrigPrice)),
+          trigger_under_(PriceLevel<CmpLess>(TrigPrice)),
           orders_(OrderMap()),
           trig_orders_(OrderMap()){};
 
@@ -24,10 +25,10 @@ class OrderBook {
     Decimal last_price = 0;
 
    private:
-    PriceLevel bids_;
-    PriceLevel asks_;
-    PriceLevel trigger_over_;
-    PriceLevel trigger_under_;
+    PriceLevel<CmpGreater> bids_;
+    PriceLevel<CmpLess> asks_;
+    PriceLevel<CmpGreater> trigger_over_;
+    PriceLevel<CmpLess> trigger_under_;
 
     OrderMap orders_;
     OrderMap trig_orders_;
