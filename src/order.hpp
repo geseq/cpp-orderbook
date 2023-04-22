@@ -20,9 +20,7 @@ struct Order : public boost::intrusive::set_base_hook<boost::intrusive::optimize
 
     OrderQueue *queue = nullptr;
 
-    Order(Decimal id, Decimal qty, Decimal price, Type type, Side side, Flag flag) : id(id), qty(qty), price(price), type(type), side(side), flag(flag) {
-        trig_price = 0;
-    };
+    Order(OrderId id, Decimal qty, Decimal price, Type type, Side side, Flag flag) : id(id), qty(qty), price(price), type(type), side(side), flag(flag){};
 
     Order(OrderId id, Decimal qty, Decimal price, Decimal trig_price, Type type, Side side, Flag flag)
         : id(id), qty(qty), price(price), trig_price(trig_price), type(type), side(side), flag(flag){};

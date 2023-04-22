@@ -26,7 +26,7 @@ class PriceLevel {
     boost::intrusive::rbtree<OrderQueue, CompareType> price_tree_;
 
     PriceType price_type_;
-    Decimal volume_ = 0;
+    Decimal volume_;
     uint64_t num_orders_ = 0;
     uint64_t depth_ = 0;
     OrderList list_;

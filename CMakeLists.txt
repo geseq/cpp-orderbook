@@ -26,4 +26,8 @@ set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF)
 CPMAddPackage( NAME Boost VERSION 1.80.0 GITHUB_REPOSITORY "boostorg/boost" GIT_TAG "boost-1.80.0")
 
-target_link_libraries(main PRIVATE Boost::intrusive)
+CPMAddPackage( NAME cpp-udecimal VERSION 0.2.1 GITHUB_REPOSITORY "geseq/cpp-udecimal" GIT_TAG "v0.2.1")
+
+include_directories(${udecimal_SOURCE_DIR}/include)
+
+target_link_libraries(main PRIVATE Boost::intrusive udecimal)

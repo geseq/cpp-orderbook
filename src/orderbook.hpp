@@ -22,7 +22,7 @@ class OrderBook {
     void putTradeNotification(uint64_t mOrderId, uint64_t tOrderId, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price);
     std::shared_ptr<Order> cancelOrder(OrderId id);
 
-    Decimal last_price = 0;
+    Decimal last_price;
 
    private:
     PriceLevel<CmpGreater> bids_;

@@ -11,8 +11,8 @@ class OrderQueue : public boost::intrusive::set_base_hook<boost::intrusive::opti
     std::shared_ptr<Order> head_ = nullptr;
     std::shared_ptr<Order> tail_ = nullptr;
 
-    Decimal price_ = 0;
-    Decimal total_qty_ = 0;
+    Decimal price_;
+    Decimal total_qty_;
     uint64_t size_ = 0;
 
    public:
