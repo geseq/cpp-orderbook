@@ -38,7 +38,7 @@ void OrderBook::addOrder(uint64_t tok, uint64_t id, Type type, Side side, Decima
     }
 
     if ((flag & (StopLoss | TakeProfit)) != 0) {
-        if (trigPrice == 0) {
+        if (trigPrice == udecimal::Zero) {
             notification_.putOrder(MsgCreateOrder, OrderRejected, id, qty, ErrInvalidTriggerPrice);
             return;
         }

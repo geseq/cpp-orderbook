@@ -1,8 +1,10 @@
 #include <cstdint>
 
+#include "udecimal.hpp"
+
 namespace orderbook {
 
-using Decimal = uint64_t;
+using Decimal = udecimal::Decimal<8>;
 using OrderId = uint64_t;
 
 enum Type : uint8_t {
@@ -10,9 +12,15 @@ enum Type : uint8_t {
     Market,
 };
 
-enum Side : uint8_t { Buy, Sell };
+enum Side : uint8_t {
+    Buy,
+    Sell
+};
 
-enum MsgType : uint8_t { MsgCreateOrder, MsgCancelOrder };
+enum MsgType : uint8_t {
+    MsgCreateOrder,
+    MsgCancelOrder
+};
 
 enum OrderStatus : uint8_t {
     OrderRejected,
@@ -39,7 +47,15 @@ enum Error : uint16_t {
     ErrNoMatching,
 };
 
-enum Flag : uint8_t { None = 0, IoC = 1, AoN = 2, FoK = 4, StopLoss = 8, TakeProfit = 16, Snapshot = 32 };
+enum Flag : uint8_t {
+    None = 0,
+    IoC = 1,
+    AoN = 2,
+    FoK = 4,
+    StopLoss = 8,
+    TakeProfit = 16,
+    Snapshot = 32
+};
 
 class Notification {
    public:
