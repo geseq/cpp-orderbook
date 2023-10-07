@@ -15,6 +15,7 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 
 set(PROJECT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
+option(ENABLE_TESTING "Enable test target generation" OFF)
 
 add_executable (main main.cpp)
 
@@ -26,8 +27,31 @@ set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF)
 CPMAddPackage( NAME Boost VERSION 1.80.0 GITHUB_REPOSITORY "boostorg/boost" GIT_TAG "boost-1.80.0")
 
-CPMAddPackage( NAME udecimal VERSION 0.5.1 GITHUB_REPOSITORY "geseq/cpp-udecimal" GIT_TAG "v0.5.1")
+CPMAddPackage( NAME udecimal VERSION 0.6.1 GITHUB_REPOSITORY "geseq/cpp-udecimal" GIT_TAG "v0.6.1")
 
 include_directories(udecimal_SOURCE_DIR)
+
+file(GLOB SOURCES "src/*.cpp")
+
+include_directories(include)
+add_library(orderbook STATIC ${SOURCES})
+target_sources(orderbook INTERFACE include/orderbook.hpp)
+target_include_directories(orderbook INTERFACE include/)
+target_link_libraries(orderbook PRIVATE Boost::intrusive udecimal)
+
+if (ENABLE_TESTING)
+    CPMAddPackage( NAME googletest GITHUB_REPOSITORY google/googletest VERSION 1.14.0 )
+
+    FILE(GLOB tests CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/*)
+    FOREACH (test ${tests})
+        include_directories(googletest_SOURCE_DIR)
+        get_filename_component(test_name ${test} NAME)
+        message("Adding test: " ${test_name})
+        add_executable(${test_name} ${PROJECT_SOURCE_DIR}/test/${test_name})
+        target_link_libraries(${test_name} PRIVATE ${CMAKE_THREAD_LIBS_INIT} orderbook gtest gtest_main Boost::algorithm Boost::intrusive udecimal)
+        add_test(${test_name} ${test_name})
+        set_property(TEST ${test_name} PROPERTY LABELS "test")
+    ENDFOREACH ()
+endif()
 
 target_link_libraries(main PRIVATE Boost::intrusive udecimal)

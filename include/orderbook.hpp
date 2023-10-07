@@ -1,3 +1,5 @@
+#pragma once
+
 #include <map>
 
 #include "boost/intrusive/rbtree.hpp"
@@ -5,22 +7,22 @@
 
 namespace orderbook {
 
-using OrderMap = boost::intrusive::rbtree<Order>;
+using OrderMap = boost::intrusive::rbtree<Order, boost::intrusive::compare<OrderIDCompare>>;
 
 class OrderBook {
    public:
     OrderBook(Notification n)
         : notification_(std::move(n)),
-          bids_(PriceLevel<CmpGreater>(BidPrice)),
-          asks_(PriceLevel<CmpLess>(AskPrice)),
-          trigger_over_(PriceLevel<CmpGreater>(TrigPrice)),
-          trigger_under_(PriceLevel<CmpLess>(TrigPrice)),
+          bids_(PriceLevel<CmpGreater>(PriceType::Bid)),
+          asks_(PriceLevel<CmpLess>(PriceType::Ask)),
+          trigger_over_(PriceLevel<CmpGreater>(PriceType::Trigger)),
+          trigger_under_(PriceLevel<CmpLess>(PriceType::Trigger)),
           orders_(OrderMap()),
           trig_orders_(OrderMap()){};
 
     void addOrder(uint64_t tok, uint64_t id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag);
-    void putTradeNotification(uint64_t mOrderId, uint64_t tOrderId, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price);
-    std::shared_ptr<Order> cancelOrder(OrderId id);
+    void putTradeNotification(uint64_t mOrderID, uint64_t tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price);
+    std::shared_ptr<Order> cancelOrder(OrderID id);
 
     Decimal last_price;
 

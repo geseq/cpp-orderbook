@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstdint>
 #include <memory>
 
@@ -10,7 +12,7 @@ namespace orderbook {
 class OrderQueue;
 
 struct Order : public boost::intrusive::set_base_hook<boost::intrusive::optimize_size<false>>, public boost::intrusive::list_base_hook<> {
-    OrderId id;
+    OrderID id;
     Decimal qty;
     Decimal price;
     Decimal trig_price;
@@ -18,11 +20,14 @@ struct Order : public boost::intrusive::set_base_hook<boost::intrusive::optimize
     Flag flag;
     Side side;
 
+    std::shared_ptr<Order> prev;
+    std::shared_ptr<Order> next;
+
     OrderQueue *queue = nullptr;
 
-    Order(OrderId id, Decimal qty, Decimal price, Type type, Side side, Flag flag) : id(id), qty(qty), price(price), type(type), side(side), flag(flag){};
+    Order(OrderID id, Decimal qty, Decimal price, Type type, Side side, Flag flag) : id(id), qty(qty), price(price), type(type), side(side), flag(flag){};
 
-    Order(OrderId id, Decimal qty, Decimal price, Decimal trig_price, Type type, Side side, Flag flag)
+    Order(OrderID id, Decimal qty, Decimal price, Decimal trig_price, Type type, Side side, Flag flag)
         : id(id), qty(qty), price(price), trig_price(trig_price), type(type), side(side), flag(flag){};
 
     Decimal getPrice(PriceType pt);
@@ -33,17 +38,13 @@ struct Order : public boost::intrusive::set_base_hook<boost::intrusive::optimize
     friend bool operator==(const Order &a, const Order &b) { return a.id == b.id; }
 };
 
-Decimal Order::getPrice(PriceType pt) {
-    if (pt == TrigPrice) {
-        return trig_price;
-    }
+struct OrderIDCompare {
+    bool operator()(const Order &o1, const Order &o2) const { return o1.id < o2.id; }
 
-    return price;
-}
+    bool operator()(const Order &o, const OrderID &id) const { return o.id < id; }
 
-void release() {
-    // TODO: put back in pool
-}
+    bool operator()(const OrderID &id, const Order &o) const { return id < o.id; }
+};
 
 }  // namespace orderbook
 
