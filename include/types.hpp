@@ -34,7 +34,7 @@ std::ostream& operator<<(std::ostream& os, const MsgType& msgType);
 enum class OrderStatus : uint8_t {
     Rejected,
     Canceled,
-    FilledParial,
+    FilledPartial,
     FilledComplete,
     Accepted,
 };

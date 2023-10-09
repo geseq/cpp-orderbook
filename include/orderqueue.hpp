@@ -10,19 +10,19 @@ namespace orderbook {
 class OrderBook;
 
 class OrderQueue : public boost::intrusive::set_base_hook<boost::intrusive::optimize_size<false>> {
-    std::shared_ptr<Order> head_ = nullptr;
-    std::shared_ptr<Order> tail_ = nullptr;
+    Order *head_ = nullptr;
+    Order *tail_ = nullptr;
 
     Decimal total_qty_;
     uint64_t size_ = 0;
 
    public:
     OrderQueue(Decimal price) : price_(price){};
-    Decimal price();
+    Decimal price() const;
     uint64_t len();
-    uint64_t totalQty();
-    std::shared_ptr<Order> head();
-    void append(std::shared_ptr<Order> o);
+    Decimal totalQty() const;
+    Order *head();
+    void append(Order *o);
     std::shared_ptr<Order> remove(const std::shared_ptr<Order> &o);
     Decimal process(OrderBook *ob, OrderID takerOrderID, Decimal qty);
 

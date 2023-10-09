@@ -20,14 +20,14 @@ struct Order : public boost::intrusive::set_base_hook<boost::intrusive::optimize
     Flag flag;
     Side side;
 
-    std::shared_ptr<Order> prev;
-    std::shared_ptr<Order> next;
+    Order *prev;
+    Order *next;
 
     OrderQueue *queue = nullptr;
 
-    Order(OrderID id, Decimal qty, Decimal price, Type type, Side side, Flag flag) : id(id), qty(qty), price(price), type(type), side(side), flag(flag){};
+    Order(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) : id(id), qty(qty), price(price), type(type), side(side), flag(flag){};
 
-    Order(OrderID id, Decimal qty, Decimal price, Decimal trig_price, Type type, Side side, Flag flag)
+    Order(OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trig_price, Flag flag)
         : id(id), qty(qty), price(price), trig_price(trig_price), type(type), side(side), flag(flag){};
 
     Decimal getPrice(PriceType pt);

@@ -8,6 +8,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <string>
 
 namespace orderbook {
 
@@ -27,26 +28,26 @@ Decimal PriceLevel<CompareType>::volume() {
 }
 
 template <class CompareType>
-void PriceLevel<CompareType>::append(const std::shared_ptr<Order>& order) {
-    auto price = order.get()->getPrice(price_type_);
+void PriceLevel<CompareType>::append(Order* order) {
+    auto price = order->getPrice(price_type_);
 
-    if (price_tree_.count(price) == 0) {
-        auto q = OrderQueue(price);
-        price_tree_.insert_equal(q);
+    auto it = price_tree_.find(price, PriceCompare());
+    auto q = &*it;
+    if (it == price_tree_.end()) {
+        q = new OrderQueue(price);
+        price_tree_.insert_equal(*q);
         ++depth_;
     }
 
-    auto it = price_tree_.find(price, PriceCompare());
-    if (it != price_tree_.end()) {
-        ++num_orders_;
-        volume_ += order->qty;
-        order->queue = &*it;
-    }
+    ++num_orders_;
+    volume_ += order->qty;
+    order->queue = q;
+    q->append(order);
 }
 
 template <class CompareType>
 void PriceLevel<CompareType>::remove(const std::shared_ptr<Order>& order) {
-    auto price = order.get()->getPrice(price_type_);
+    auto price = order->getPrice(price_type_);
 
     auto q = order->queue;
     if (q != nullptr) {
@@ -81,13 +82,78 @@ Decimal PriceLevel<CompareType>::processMarketOrder(OrderBook* ob, OrderID taker
 
     auto qtyLeft = qty;
     Decimal qtyProcessed = uint64_t(0);
-    for (auto q = getQueue(); qtyLeft > uint64_t(0) && q != nullptr; q = getQueue()) {
+    for (auto q = getQueue(); !qtyLeft.is_zero() && q != nullptr; q = getQueue()) {
         auto pq = q->process(ob, takerOrderID, qtyLeft);
         qtyLeft -= pq;
         qtyProcessed += pq;
     }
 
     return uint64_t(0);
+};
+
+template <class CompareType>
+Decimal PriceLevel<CompareType>::processLimitOrder(OrderBook* ob, OrderID& takerOrderID, Decimal& price, Decimal qty, Flag& flag) {
+    Decimal qtyProcessed = {};
+    auto orderQueue = getQueue();
+
+    if (orderQueue == nullptr) {
+        return qtyProcessed;
+    }
+
+    if constexpr (std::is_same_v<CompareType, CmpGreater>) {
+        if (price > orderQueue->price()) {
+            return qtyProcessed;
+        }
+    } else {
+        if (price < orderQueue->price()) {
+            return qtyProcessed;
+        }
+    }
+
+    // TODO: Fix AoN
+    if (flag & (AoN | FoK)) {
+        if (qty > volume()) {
+            return Decimal{};
+        }
+
+        bool canFill = false;
+
+        auto aQty = qty;
+        if constexpr (std::is_same_v<CompareType, CmpGreater>) {
+            while (orderQueue != nullptr && price < orderQueue->price()) {
+                if (aQty <= orderQueue->totalQty()) {
+                    canFill = true;
+                    break;
+                }
+                aQty -= orderQueue->totalQty();
+                orderQueue = GetNextQueue(orderQueue->price());
+            }
+        } else {
+            while (orderQueue != nullptr && price > orderQueue->price()) {
+                if (aQty <= orderQueue->totalQty()) {
+                    canFill = true;
+                    break;
+                }
+                aQty -= orderQueue->totalQty();
+                orderQueue = GetNextQueue(orderQueue->price());
+            }
+        }
+
+        if (!canFill) {
+            return Decimal{};
+        }
+    }
+
+    orderQueue = getQueue();
+    Decimal qtyLeft = qty;
+
+    for (orderQueue = getQueue(); !qtyLeft.is_zero() && orderQueue != nullptr; orderQueue = getQueue()) {
+        Decimal result = orderQueue->process(ob, takerOrderID, qtyLeft);
+        qtyLeft -= result;
+        qtyProcessed += result;
+    }
+
+    return qtyProcessed;
 };
 
 template class PriceLevel<CmpGreater>;

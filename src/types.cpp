@@ -38,8 +38,8 @@ std::ostream& operator<<(std::ostream& os, const OrderStatus& status) {
             return os << "Rejected";
         case OrderStatus::Canceled:
             return os << "Canceled";
-        case OrderStatus::FilledParial:
-            return os << "FilledParial";
+        case OrderStatus::FilledPartial:
+            return os << "FilledPartial";
         case OrderStatus::FilledComplete:
             return os << "FilledComplete";
         case OrderStatus::Accepted:

@@ -1,5 +1,7 @@
 #include "order.hpp"
 
+#include <iostream>
+
 namespace orderbook {
 
 Decimal Order::getPrice(PriceType pt) {

@@ -41,10 +41,12 @@ target_link_libraries(orderbook PRIVATE Boost::intrusive udecimal)
 
 if (ENABLE_TESTING)
     CPMAddPackage( NAME googletest GITHUB_REPOSITORY google/googletest VERSION 1.14.0 )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    include_directories(googletest_SOURCE_DIR)
+    enable_testing()
 
     FILE(GLOB tests CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/*)
     FOREACH (test ${tests})
-        include_directories(googletest_SOURCE_DIR)
         get_filename_component(test_name ${test} NAME)
         message("Adding test: " ${test_name})
         add_executable(${test_name} ${PROJECT_SOURCE_DIR}/test/${test_name})
