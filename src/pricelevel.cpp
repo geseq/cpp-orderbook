@@ -117,7 +117,6 @@ Decimal PriceLevel<CompareType>::processLimitOrder(OrderBook* ob, OrderID& taker
         }
 
         bool canFill = false;
-
         auto aQty = qty;
         if constexpr (std::is_same_v<CompareType, CmpGreater>) {
             while (orderQueue != nullptr && price < orderQueue->price()) {

@@ -11,6 +11,8 @@
 #include <string>
 #include <unordered_map>
 
+#include "util.hpp"
+
 namespace orderbook {
 
 using orderbook::Error;
@@ -80,10 +82,81 @@ void OrderBook::addOrder(uint64_t tok, OrderID id, Type type, Side side, Decimal
 void OrderBook::addTrigOrder(uint64_t id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag) {
     // TODO
     return;
+
+    switch (flag) {
+        case Flag::StopLoss:
+            switch (side) {
+                case Side::Buy:
+                    if (trigPrice <= last_price) {
+                        processOrder(id, type, side, qty, price, flag);
+                        return;
+                    }
+                    {
+                        auto o = new Order(id, type, side, qty, price, trigPrice, flag);
+                        trigger_over_.append(o);
+                        trig_orders_.insert_equal(*o);
+                    }
+                    break;
+                case Side::Sell:
+                    if (last_price <= trigPrice) {
+                        processOrder(id, type, side, qty, price, flag);
+                        return;
+                    }
+                    {
+                        auto o = new Order(id, type, side, qty, price, trigPrice, flag);
+                        trigger_under_.append(o);
+                        trig_orders_.insert_equal(*o);
+                    }
+                    break;
+            }
+            break;
+        case Flag::TakeProfit:
+            switch (side) {
+                case Side::Buy:
+                    if (last_price <= trigPrice) {
+                        processOrder(id, type, side, qty, price, flag);
+                        return;
+                    }
+                    {
+                        auto o = new Order(id, type, side, qty, price, trigPrice, flag);
+                        trigger_under_.append(o);
+                        trig_orders_.insert_equal(*o);
+                    }
+                    break;
+                case Side::Sell:
+                    if (trigPrice <= last_price) {
+                        processOrder(id, type, side, qty, price, flag);
+                        return;
+                    }
+                    {
+                        auto o = new Order(id, type, side, qty, price, trigPrice, flag);
+                        trigger_over_.append(o);
+                        trig_orders_.insert_equal(*o);
+                    }
+                    break;
+            }
+            break;
+        default:
+            break;
+    }
 }
+
+void OrderBook::postProcess(Decimal& lp) {
+    if (lp == last_price) {
+        return;
+    }
+
+    queueTriggeredOrders();
+    processTriggeredOrders();
+}
+
+void OrderBook::queueTriggeredOrders() {}
+
+void OrderBook::processTriggeredOrders() {}
 
 void OrderBook::processOrder(uint64_t id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
     auto lp = last_price;
+    scope_exit defer([this, &lp]() { postProcess(lp); });
     // TODO defer
 
     if (type == Type::Market) {

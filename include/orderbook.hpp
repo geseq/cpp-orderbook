@@ -47,6 +47,9 @@ class OrderBook {
 
     void addTrigOrder(uint64_t id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag);
     void processOrder(uint64_t id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
+    void postProcess(Decimal& lp);
+    void queueTriggeredOrders();
+    void processTriggeredOrders();
 };
 
 }  // namespace orderbook
