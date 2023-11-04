@@ -23,7 +23,7 @@ using orderbook::Side;
 using orderbook::Type;
 
 void OrderBook::addOrder(uint64_t tok, OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag) {
-    uint64_t exp = tok - 1;
+    uint64_t exp = tok - 1;  // technically this should always be single threaded, but just in case.
     if (!last_token_.compare_exchange_strong(exp, tok)) {
         throw std::invalid_argument("invalid token received: cannot maintain determinism");
     }
@@ -64,7 +64,7 @@ void OrderBook::addOrder(uint64_t tok, OrderID id, Type type, Side side, Decimal
     }
 
     if (type != Type::Market) {
-        if (orders_.find(id, OrderIDCompare()) != orders_.end()) {
+        if (orders_.find(id, orderbook::OrderIDCompare()) != orders_.end()) {
             notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, uint64_t(0), Error::OrderExists);
             return;
         }
@@ -79,7 +79,7 @@ void OrderBook::addOrder(uint64_t tok, OrderID id, Type type, Side side, Decimal
     processOrder(id, type, side, qty, price, flag);
 }
 
-void OrderBook::addTrigOrder(uint64_t id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag) {
+void OrderBook::addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag) {
     // TODO
     return;
 
@@ -154,16 +154,15 @@ void OrderBook::queueTriggeredOrders() {}
 
 void OrderBook::processTriggeredOrders() {}
 
-void OrderBook::processOrder(uint64_t id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
+void OrderBook::processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
     auto lp = last_price;
     scope_exit defer([this, &lp]() { postProcess(lp); });
-    // TODO defer
 
     if (type == Type::Market) {
         if (side == Side::Buy) {
-            asks_.processMarketOrder(this, id, qty, flag);
+            asks_.processMarketOrder(*this, id, qty, flag);
         } else {
-            bids_.processMarketOrder(this, id, qty, flag);
+            bids_.processMarketOrder(*this, id, qty, flag);
         }
 
         return;
@@ -171,13 +170,12 @@ void OrderBook::processOrder(uint64_t id, Type type, Side side, Decimal qty, Dec
 
     Decimal qtyProcessed;
     if (side == Side::Buy) {
-        qtyProcessed = asks_.processLimitOrder(this, id, price, qty, flag);
+        qtyProcessed = asks_.processLimitOrder(*this, id, price, qty, flag);
     } else {
-        qtyProcessed = bids_.processLimitOrder(this, id, price, qty, flag);
+        qtyProcessed = bids_.processLimitOrder(*this, id, price, qty, flag);
     }
 
     if ((flag & (IoC | FoK)) != 0) {
-        // TODO post process
         return;
     }
 
@@ -193,7 +191,6 @@ void OrderBook::processOrder(uint64_t id, Type type, Side side, Decimal qty, Dec
         orders_.insert_equal(*o);
     }
 
-    // TODO post process
     return;
 }
 
@@ -218,7 +215,7 @@ void OrderBook::cancelOrder(uint64_t tok, OrderID id) {
 }
 
 std::shared_ptr<Order> OrderBook::cancelOrder(OrderID id) {
-    if (orders_.find(id, orderbook::OrderIDCompare()) == 0) {
+    if (orders_.find(id, orderbook::OrderIDCompare()) == orders_.end()) {
         // TODO cancel triger
         return nullptr;
     }
@@ -226,7 +223,7 @@ std::shared_ptr<Order> OrderBook::cancelOrder(OrderID id) {
     auto it = orders_.find(id, OrderIDCompare());
     if (it != orders_.end()) {
         std::shared_ptr<Order> order(&*it, [](Order* ptr) { delete ptr; });
-        orders_.erase(it);
+        orders_.erase(*it);
 
         if (order->side == Side::Buy) {
             bids_.remove(order);

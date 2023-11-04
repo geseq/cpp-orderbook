@@ -39,8 +39,8 @@ class PriceLevel {
     OrderQueue* getQueue();
     void append(Order* order);
     void remove(const std::shared_ptr<Order>& order);
-    Decimal processMarketOrder(OrderBook* ob, OrderID takerOrderID, Decimal qty, Flag flag);
-    Decimal processLimitOrder(OrderBook* ob, OrderID& takerOrderID, Decimal& price, Decimal qty, Flag& flag);
+    Decimal processMarketOrder(OrderBook& ob, OrderID takerOrderID, Decimal qty, Flag flag);
+    Decimal processLimitOrder(OrderBook& ob, OrderID& takerOrderID, Decimal& price, Decimal qty, Flag& flag);
 
     PriceTree& price_tree() { return price_tree_; }
 

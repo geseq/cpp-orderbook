@@ -7,7 +7,7 @@
 
 namespace orderbook {
 
-using OrderMap = boost::intrusive::rbtree<Order, boost::intrusive::compare<OrderIDCompare>>;
+using OrderMap = boost::intrusive::rbtree<Order, CmpLess>;
 
 class OrderBook {
    public:
@@ -20,11 +20,11 @@ class OrderBook {
           orders_(OrderMap()),
           trig_orders_(OrderMap()){};
 
-    void addOrder(uint64_t tok, uint64_t id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag);
-    void putTradeNotification(uint64_t mOrderID, uint64_t tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price);
+    void addOrder(uint64_t tok, OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag);
+    void putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price);
     void cancelOrder(uint64_t tok, OrderID id);
-    std::shared_ptr<Order> cancelOrder(OrderID id);
     bool hasOrder(OrderID id);
+    friend Decimal OrderQueue::process(OrderBook& ob, OrderID takerOrderID, Decimal qty);
 
     std::string toString();
 
@@ -45,8 +45,9 @@ class OrderBook {
 
     bool matching_ = true;
 
-    void addTrigOrder(uint64_t id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag);
-    void processOrder(uint64_t id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
+    std::shared_ptr<Order> cancelOrder(OrderID id);
+    void addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag);
+    void processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
     void postProcess(Decimal& lp);
     void queueTriggeredOrders();
     void processTriggeredOrders();
