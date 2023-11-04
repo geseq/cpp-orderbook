@@ -92,7 +92,7 @@ void OrderBook::addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Deci
                         return;
                     }
                     {
-                        auto o = new Order(id, type, side, qty, price, trigPrice, flag);
+                        auto* o = order_pool_.acquire(id, type, side, qty, price, trigPrice, flag);
                         trigger_over_.append(o);
                         trig_orders_.insert_equal(*o);
                     }
@@ -103,7 +103,7 @@ void OrderBook::addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Deci
                         return;
                     }
                     {
-                        auto o = new Order(id, type, side, qty, price, trigPrice, flag);
+                        auto* o = order_pool_.acquire(id, type, side, qty, price, trigPrice, flag);
                         trigger_under_.append(o);
                         trig_orders_.insert_equal(*o);
                     }
@@ -118,7 +118,7 @@ void OrderBook::addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Deci
                         return;
                     }
                     {
-                        auto o = new Order(id, type, side, qty, price, trigPrice, flag);
+                        auto* o = order_pool_.acquire(id, type, side, qty, price, trigPrice, flag);
                         trigger_under_.append(o);
                         trig_orders_.insert_equal(*o);
                     }
@@ -129,7 +129,7 @@ void OrderBook::addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Deci
                         return;
                     }
                     {
-                        auto o = new Order(id, type, side, qty, price, trigPrice, flag);
+                        auto* o = order_pool_.acquire(id, type, side, qty, price, trigPrice, flag);
                         trigger_over_.append(o);
                         trig_orders_.insert_equal(*o);
                     }
@@ -181,7 +181,7 @@ void OrderBook::processOrder(OrderID id, Type type, Side side, Decimal qty, Deci
 
     auto qtyLeft = qty - qtyProcessed;
     if (qtyLeft > uint64_t(0)) {
-        auto* o = new Order{id, type, side, qtyLeft, price, uint64_t(0), flag};
+        auto* o = order_pool_.acquire(id, type, side, qtyLeft, price, uint64_t(0), flag);
         if (side == Side::Buy) {
             bids_.append(o);
         } else {
@@ -222,7 +222,8 @@ std::shared_ptr<Order> OrderBook::cancelOrder(OrderID id) {
 
     auto it = orders_.find(id, OrderIDCompare());
     if (it != orders_.end()) {
-        std::shared_ptr<Order> order(&*it, [](Order* ptr) { delete ptr; });
+        auto& pool = order_pool_;
+        std::shared_ptr<Order> order(&*it, [&pool](Order* ptr) { pool.release(ptr); });
         orders_.erase(*it);
 
         if (order->side == Side::Buy) {

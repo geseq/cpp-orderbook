@@ -28,7 +28,7 @@ set(Boost_USE_STATIC_RUNTIME OFF)
 CPMAddPackage( NAME Boost VERSION 1.80.0 GITHUB_REPOSITORY "boostorg/boost" GIT_TAG "boost-1.80.0")
 
 CPMAddPackage( NAME udecimal VERSION 0.6.1 GITHUB_REPOSITORY "geseq/cpp-udecimal" GIT_TAG "v0.7.0")
-CPMAddPackage( NAME pool VERSION 0.6.1 GITHUB_REPOSITORY "geseq/cpp-pool" GIT_TAG "v0.3.0")
+CPMAddPackage( NAME pool VERSION 0.6.1 GITHUB_REPOSITORY "geseq/cpp-pool" GIT_TAG "v0.4.0")
 
 include_directories(udecimal_SOURCE_DIR)
 include_directories(pool_SOURCE_DIR)

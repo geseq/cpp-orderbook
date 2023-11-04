@@ -31,6 +31,8 @@ class OrderBook {
     Decimal last_price;
 
    private:
+    pool::AdaptiveObjectPool<Order, 16384> order_pool_;
+
     PriceLevel<CmpGreater> bids_;
     PriceLevel<CmpLess> asks_;
     PriceLevel<CmpGreater> trigger_over_;
