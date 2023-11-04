@@ -7,6 +7,7 @@
 #include "boost/intrusive/list.hpp"
 #include "boost/intrusive/rbtree.hpp"
 #include "orderqueue.hpp"
+#include "pool.hpp"
 
 namespace orderbook {
 
@@ -23,6 +24,8 @@ using CmpLess = boost::intrusive::compare<std::less<>>;
 
 template <class CompareType>
 class PriceLevel {
+    pool::AdaptiveObjectPool<OrderQueue, 16384> queue_pool_;
+
     using PriceTree = boost::intrusive::rbtree<OrderQueue, CompareType>;
     PriceTree price_tree_;
 

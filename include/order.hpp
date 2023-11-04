@@ -20,8 +20,8 @@ struct Order : public boost::intrusive::set_base_hook<boost::intrusive::optimize
     Flag flag;
     Side side;
 
-    Order *prev;
-    Order *next;
+    Order *prev = nullptr;
+    Order *next = nullptr;
 
     OrderQueue *queue = nullptr;
 

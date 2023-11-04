@@ -34,7 +34,7 @@ void PriceLevel<CompareType>::append(Order* order) {
     auto it = price_tree_.find(price);
     auto q = &*it;
     if (it == price_tree_.end()) {
-        q = new OrderQueue(price);
+        q = queue_pool_.acquire(price);
         price_tree_.insert_equal(*q);
         ++depth_;
     }
@@ -64,7 +64,7 @@ OrderQueue* PriceLevel<CompareType>::getQueue() {
     while (q != price_tree_.end() && q->len() == 0) {
         price_tree_.erase(q->price());
         --depth_;
-        delete &*q;
+        queue_pool_.release(&*q);
         q = price_tree_.begin();
     }
 
