@@ -24,7 +24,7 @@ using CmpLess = boost::intrusive::compare<std::less<>>;
 
 template <class CompareType>
 class PriceLevel {
-    pool::AdaptiveObjectPool<OrderQueue, 16384> queue_pool_;
+    pool::AdaptiveObjectPool<OrderQueue> queue_pool_;
 
     using PriceTree = boost::intrusive::rbtree<OrderQueue, CompareType>;
     PriceTree price_tree_;
@@ -35,7 +35,7 @@ class PriceLevel {
     uint64_t depth_ = 0;
 
    public:
-    PriceLevel(PriceType price_type) : price_type_(price_type){};
+    PriceLevel(PriceType price_type, size_t price_level_pool_size) : price_type_(price_type), queue_pool_(price_level_pool_size){};
     uint64_t len();
     uint64_t depth();
     Decimal volume();
