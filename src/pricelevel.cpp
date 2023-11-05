@@ -31,10 +31,10 @@ template <class CompareType>
 void PriceLevel<CompareType>::append(Order* order) {
     auto price = order->getPrice(price_type_);
 
-    auto it = price_tree_.find(price, PriceCompare());
+    auto it = price_tree_.find(price);
     auto q = &*it;
     if (it == price_tree_.end()) {
-        q = new OrderQueue(price);
+        q = queue_pool_.acquire(price);
         price_tree_.insert_equal(*q);
         ++depth_;
     }
@@ -54,11 +54,6 @@ void PriceLevel<CompareType>::remove(const std::shared_ptr<Order>& order) {
         q->remove(order);
     }
 
-    if (q->len() == 0) {
-        price_tree_.erase(price);
-        --depth_;
-    }
-
     --num_orders_;
     volume_ -= order->qty;
 }
@@ -66,6 +61,13 @@ void PriceLevel<CompareType>::remove(const std::shared_ptr<Order>& order) {
 template <class CompareType>
 OrderQueue* PriceLevel<CompareType>::getQueue() {
     auto q = price_tree_.begin();
+    while (q != price_tree_.end() && q->len() == 0) {
+        price_tree_.erase(q->price());
+        --depth_;
+        queue_pool_.release(&*q);
+        q = price_tree_.begin();
+    }
+
     if (q != price_tree_.end()) {
         return &*q;
     }
@@ -74,7 +76,7 @@ OrderQueue* PriceLevel<CompareType>::getQueue() {
 }
 
 template <class CompareType>
-Decimal PriceLevel<CompareType>::processMarketOrder(OrderBook* ob, OrderID takerOrderID, Decimal qty, Flag flag) {
+Decimal PriceLevel<CompareType>::processMarketOrder(OrderBook& ob, OrderID takerOrderID, Decimal qty, Flag flag) {
     // TODO: this won't work as pricelevel volumes aren't accounted for correctly
     if ((flag & (AoN | FoK)) != 0 && qty > volume_) {
         return uint64_t(0);
@@ -92,7 +94,7 @@ Decimal PriceLevel<CompareType>::processMarketOrder(OrderBook* ob, OrderID taker
 };
 
 template <class CompareType>
-Decimal PriceLevel<CompareType>::processLimitOrder(OrderBook* ob, OrderID& takerOrderID, Decimal& price, Decimal qty, Flag& flag) {
+Decimal PriceLevel<CompareType>::processLimitOrder(OrderBook& ob, OrderID& takerOrderID, Decimal& price, Decimal qty, Flag& flag) {
     Decimal qtyProcessed = {};
     auto orderQueue = getQueue();
 
@@ -117,7 +119,6 @@ Decimal PriceLevel<CompareType>::processLimitOrder(OrderBook* ob, OrderID& taker
         }
 
         bool canFill = false;
-
         auto aQty = qty;
         if constexpr (std::is_same_v<CompareType, CmpGreater>) {
             while (orderQueue != nullptr && price < orderQueue->price()) {

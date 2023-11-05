@@ -24,7 +24,7 @@ class OrderQueue : public boost::intrusive::set_base_hook<boost::intrusive::opti
     Order *head();
     void append(Order *o);
     std::shared_ptr<Order> remove(const std::shared_ptr<Order> &o);
-    Decimal process(OrderBook *ob, OrderID takerOrderID, Decimal qty);
+    Decimal process(OrderBook &ob, OrderID takerOrderID, Decimal qty);
 
     Decimal price_;
 
