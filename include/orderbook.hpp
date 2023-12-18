@@ -4,14 +4,16 @@
 
 #include "boost/intrusive/rbtree.hpp"
 #include "pricelevel.hpp"
+#include "types.hpp"
 
 namespace orderbook {
 
 using OrderMap = boost::intrusive::rbtree<Order, CmpLess>;
 
+template <class Notification>
 class OrderBook {
    public:
-    OrderBook(Notification& n, size_t price_level_pool_size = 16384, size_t order_pool_size = 16384)
+    OrderBook(NotificationInterface<Notification>& n, size_t price_level_pool_size = 16384, size_t order_pool_size = 16384)
         : order_pool_(order_pool_size),
           notification_(n),
           bids_(PriceLevel<CmpGreater>(PriceType::Bid, price_level_pool_size)),
@@ -41,11 +43,11 @@ class OrderBook {
     OrderMap orders_;
     OrderMap trig_orders_;
 
-    Notification& notification_;
+    NotificationInterface<Notification>& notification_;
 
     std::atomic_uint64_t last_token_ = 0;
 
-    bool matching_ = true;
+    std::atomic_uint64_t matching_ = 1;
 
     std::shared_ptr<Order> cancelOrder(OrderID id);
     void addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag);

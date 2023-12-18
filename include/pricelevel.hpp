@@ -11,6 +11,7 @@
 
 namespace orderbook {
 
+template <class Notification>
 class OrderBook;
 
 class Compare {

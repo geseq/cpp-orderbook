@@ -7,6 +7,7 @@
 
 namespace orderbook {
 
+template <class Notification>
 class OrderBook;
 
 using TradeNotification =

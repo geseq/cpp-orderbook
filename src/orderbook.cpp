@@ -22,7 +22,8 @@ using orderbook::OrderStatus;
 using orderbook::Side;
 using orderbook::Type;
 
-void OrderBook::addOrder(uint64_t tok, OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag) {
+template <class Notification>
+void OrderBook<Notification>::addOrder(uint64_t tok, OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag) {
     uint64_t exp = tok - 1;  // technically this should always be single threaded, but just in case.
     if (!last_token_.compare_exchange_strong(exp, tok)) {
         throw std::invalid_argument("invalid token received: cannot maintain determinism");
@@ -79,7 +80,8 @@ void OrderBook::addOrder(uint64_t tok, OrderID id, Type type, Side side, Decimal
     processOrder(id, type, side, qty, price, flag);
 }
 
-void OrderBook::addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag) {
+template <class Notification>
+void OrderBook<Notification>::addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag) {
     // TODO
     return;
 
@@ -141,7 +143,8 @@ void OrderBook::addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Deci
     }
 }
 
-void OrderBook::postProcess(Decimal& lp) {
+template <class Notification>
+void OrderBook<Notification>::postProcess(Decimal& lp) {
     if (lp == last_price) {
         return;
     }
@@ -150,11 +153,14 @@ void OrderBook::postProcess(Decimal& lp) {
     processTriggeredOrders();
 }
 
-void OrderBook::queueTriggeredOrders() {}
+template <class Notification>
+void OrderBook<Notification>::queueTriggeredOrders() {}
 
-void OrderBook::processTriggeredOrders() {}
+template <class Notification>
+void OrderBook<Notification>::processTriggeredOrders() {}
 
-void OrderBook::processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
+template <class Notification>
+void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
     auto lp = last_price;
     scope_exit defer([this, &lp]() { postProcess(lp); });
 
@@ -201,11 +207,13 @@ void OrderBook::processOrder(OrderID id, Type type, Side side, Decimal qty, Deci
     return;
 }
 
-void OrderBook::putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {
+template <class Notification>
+void OrderBook<Notification>::putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {
     notification_.putTrade(mOrderID, tOrderID, mStatus, tStatus, qty, price);
 }
 
-void OrderBook::cancelOrder(uint64_t tok, OrderID id) {
+template <class Notification>
+void OrderBook<Notification>::cancelOrder(uint64_t tok, OrderID id) {
     uint64_t exp = tok - 1;
     if (!last_token_.compare_exchange_strong(exp, tok)) {
         throw std::invalid_argument("invalid token received: cannot maintain determinism");
@@ -221,7 +229,8 @@ void OrderBook::cancelOrder(uint64_t tok, OrderID id) {
     order->release();
 }
 
-std::shared_ptr<Order> OrderBook::cancelOrder(OrderID id) {
+template <class Notification>
+std::shared_ptr<Order> OrderBook<Notification>::cancelOrder(OrderID id) {
     if (orders_.find(id, orderbook::OrderIDCompare()) == orders_.end()) {
         // TODO cancel triger
         return nullptr;
@@ -246,9 +255,13 @@ std::shared_ptr<Order> OrderBook::cancelOrder(OrderID id) {
     return nullptr;
 }
 
-bool OrderBook::hasOrder(OrderID id) { return orders_.find(id, OrderIDCompare()) != orders_.end(); }
+template <class Notification>
+bool OrderBook<Notification>::hasOrder(OrderID id) {
+    return orders_.find(id, OrderIDCompare()) != orders_.end();
+}
 
-std::string OrderBook::toString() {
+template <class Notification>
+std::string OrderBook<Notification>::toString() {
     std::stringstream ss;
 
     const auto& bids = bids_.price_tree();
