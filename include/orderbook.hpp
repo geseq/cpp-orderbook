@@ -25,7 +25,6 @@ class OrderBook {
     void putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price);
     void cancelOrder(uint64_t tok, OrderID id);
     bool hasOrder(OrderID id);
-    friend Decimal OrderQueue::process(OrderBook& ob, OrderID takerOrderID, Decimal qty);
 
     std::string toString();
 

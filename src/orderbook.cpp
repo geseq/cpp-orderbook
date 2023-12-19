@@ -158,11 +158,18 @@ void OrderBook::processOrder(OrderID id, Type type, Side side, Decimal qty, Deci
     auto lp = last_price;
     scope_exit defer([this, &lp]() { postProcess(lp); });
 
+    static const auto tradeNotification = [this](OrderID mOrderID, OrderID tOrderID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty,
+                                                 Decimal price) {
+        this->putTradeNotification(mOrderID, tOrderID, mOrderStatus, tOrderStatus, qty, price);
+        this->last_price = price;
+    };
+    static const auto postOrderFill = [this](OrderID id) { this->cancelOrder(id); };
+
     if (type == Type::Market) {
         if (side == Side::Buy) {
-            asks_.processMarketOrder(*this, id, qty, flag);
+            asks_.processMarketOrder(tradeNotification, postOrderFill, id, qty, flag);
         } else {
-            bids_.processMarketOrder(*this, id, qty, flag);
+            bids_.processMarketOrder(tradeNotification, postOrderFill, id, qty, flag);
         }
 
         return;
@@ -170,9 +177,9 @@ void OrderBook::processOrder(OrderID id, Type type, Side side, Decimal qty, Deci
 
     Decimal qtyProcessed;
     if (side == Side::Buy) {
-        qtyProcessed = asks_.processLimitOrder(*this, id, price, qty, flag);
+        qtyProcessed = asks_.processLimitOrder(tradeNotification, postOrderFill, id, price, qty, flag);
     } else {
-        qtyProcessed = bids_.processLimitOrder(*this, id, price, qty, flag);
+        qtyProcessed = bids_.processLimitOrder(tradeNotification, postOrderFill, id, price, qty, flag);
     }
 
     if ((flag & (IoC | FoK)) != 0) {
