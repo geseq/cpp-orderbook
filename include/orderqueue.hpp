@@ -9,6 +9,10 @@ namespace orderbook {
 
 class OrderBook;
 
+using TradeNotification =
+    std::function<void(OrderID mOrderID, OrderID tOrderID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty, Decimal price)>;
+using PostOrderFill = std::function<void(OrderID canceledOrderID)>;
+
 class OrderQueue : public boost::intrusive::set_base_hook<boost::intrusive::optimize_size<false>> {
     Order *head_ = nullptr;
     Order *tail_ = nullptr;
@@ -24,7 +28,7 @@ class OrderQueue : public boost::intrusive::set_base_hook<boost::intrusive::opti
     Order *head();
     void append(Order *o);
     std::shared_ptr<Order> remove(const std::shared_ptr<Order> &o);
-    Decimal process(OrderBook &ob, OrderID takerOrderID, Decimal qty);
+    Decimal process(const TradeNotification &tn, const PostOrderFill &postFill, OrderID takerOrderID, Decimal qty);
 
     Decimal price_;
 

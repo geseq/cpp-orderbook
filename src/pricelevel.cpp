@@ -76,7 +76,7 @@ OrderQueue* PriceLevel<CompareType>::getQueue() {
 }
 
 template <class CompareType>
-Decimal PriceLevel<CompareType>::processMarketOrder(OrderBook& ob, OrderID takerOrderID, Decimal qty, Flag flag) {
+Decimal PriceLevel<CompareType>::processMarketOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal qty, Flag flag) {
     // TODO: this won't work as pricelevel volumes aren't accounted for correctly
     if ((flag & (AoN | FoK)) != 0 && qty > volume_) {
         return uint64_t(0);
@@ -85,7 +85,7 @@ Decimal PriceLevel<CompareType>::processMarketOrder(OrderBook& ob, OrderID taker
     auto qtyLeft = qty;
     Decimal qtyProcessed = uint64_t(0);
     for (auto q = getQueue(); !qtyLeft.is_zero() && q != nullptr; q = getQueue()) {
-        auto pq = q->process(ob, takerOrderID, qtyLeft);
+        auto pq = q->process(tn, pf, takerOrderID, qtyLeft);
         qtyLeft -= pq;
         qtyProcessed += pq;
     }
@@ -94,7 +94,8 @@ Decimal PriceLevel<CompareType>::processMarketOrder(OrderBook& ob, OrderID taker
 };
 
 template <class CompareType>
-Decimal PriceLevel<CompareType>::processLimitOrder(OrderBook& ob, OrderID& takerOrderID, Decimal& price, Decimal qty, Flag& flag) {
+Decimal PriceLevel<CompareType>::processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID& takerOrderID, Decimal& price, Decimal qty,
+                                                   Flag& flag) {
     Decimal qtyProcessed = {};
     auto orderQueue = getQueue();
 
@@ -149,7 +150,7 @@ Decimal PriceLevel<CompareType>::processLimitOrder(OrderBook& ob, OrderID& taker
     Decimal qtyLeft = qty;
 
     for (orderQueue = getQueue(); !qtyLeft.is_zero() && orderQueue != nullptr; orderQueue = getQueue()) {
-        Decimal result = orderQueue->process(ob, takerOrderID, qtyLeft);
+        Decimal result = orderQueue->process(tn, pf, takerOrderID, qtyLeft);
         qtyLeft -= result;
         qtyProcessed += result;
     }

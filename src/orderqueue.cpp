@@ -62,7 +62,7 @@ std::shared_ptr<Order> OrderQueue::remove(const std::shared_ptr<Order>& o) {
     return o;
 }
 
-Decimal OrderQueue::process(OrderBook& ob, OrderID takerOrderID, Decimal qty) {
+Decimal OrderQueue::process(const TradeNotification& tn, const PostOrderFill& postFill, OrderID takerOrderID, Decimal qty) {
     Decimal qtyProcessed = {};
     BOOST_ASSERT(head_ != nullptr);
     for (auto ho = head_; ho != nullptr && qty > uint64_t(0); ho = head_) {
@@ -70,22 +70,19 @@ Decimal OrderQueue::process(OrderBook& ob, OrderID takerOrderID, Decimal qty) {
             qtyProcessed += qty;
             ho->qty -= qty;
             total_qty_ -= qty;
-            ob.putTradeNotification(ho->id, takerOrderID, OrderStatus::FilledPartial, OrderStatus::FilledComplete, qty, ho->price);
-            ob.last_price = ho->price;
+            tn(ho->id, takerOrderID, OrderStatus::FilledPartial, OrderStatus::FilledComplete, qty, ho->price);
             break;
         } else if (qty > ho->qty) {
             qtyProcessed += ho->qty;
             qty -= ho->qty;
-            ob.cancelOrder(ho->id);
-            ob.putTradeNotification(ho->id, takerOrderID, OrderStatus::FilledComplete, OrderStatus::FilledPartial, ho->qty, ho->price);
-            ob.last_price = ho->price;
+            postFill(ho->id);
+            tn(ho->id, takerOrderID, OrderStatus::FilledComplete, OrderStatus::FilledPartial, ho->qty, ho->price);
             ho->release();
         } else {
             qtyProcessed += ho->qty;
             qty -= ho->qty;
-            ob.cancelOrder(ho->id);
-            ob.putTradeNotification(ho->id, takerOrderID, OrderStatus::FilledComplete, OrderStatus::FilledComplete, ho->qty, ho->price);
-            ob.last_price = ho->price;
+            postFill(ho->id);
+            tn(ho->id, takerOrderID, OrderStatus::FilledComplete, OrderStatus::FilledComplete, ho->qty, ho->price);
             ho->release();
         }
     }
