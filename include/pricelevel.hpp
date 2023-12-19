@@ -11,8 +11,6 @@
 
 namespace orderbook {
 
-class OrderBook;
-
 class Compare {
    public:
     bool LessThanOrEqual(Decimal price);

@@ -83,12 +83,28 @@ struct Trade {
     Decimal Price;
 };
 
-class Notification {
+// Notification is the interface for actual implementation of a notification handler
+template <typename Implementation>
+class NotificationInterface {
    public:
-    virtual void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty, Error err) {}
-    virtual void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty) {}
+    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty, Error err) {
+        static_cast<Implementation*>(this)->putOrder(msgtype, status, id, qty, err);
+    }
 
-    virtual void putTrade(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {}
+    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty) { static_cast<Implementation*>(this)->putOrder(msgtype, status, id, qty); }
+
+    void putTrade(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {
+        static_cast<Implementation*>(this)->putTrade(mOrderID, tOrderID, mStatus, tStatus, qty, price);
+    }
+};
+
+class EmptyNotification : public NotificationInterface<EmptyNotification> {
+   public:
+    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty, Error err) {}
+
+    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty) {}
+
+    void putTrade(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {}
 };
 
 }  // namespace orderbook

@@ -63,21 +63,21 @@ struct Trade : public NotificationBase {
     }
 };
 
-class Notification : public orderbook::Notification {
+class Notification : public orderbook::NotificationInterface<Notification> {
    public:
     void Reset() { n.clear(); }
 
-    void putOrder(MsgType m, OrderStatus s, OrderID orderID, Decimal qty, orderbook::Error err) override {
+    void putOrder(MsgType m, OrderStatus s, OrderID orderID, Decimal qty, orderbook::Error err) {
         auto notification = std::make_shared<OrderNotification>(m, s, orderID, qty, err);
         n.emplace_back(notification);
     }
 
-    void putOrder(MsgType m, OrderStatus s, OrderID orderID, Decimal qty) override {
+    void putOrder(MsgType m, OrderStatus s, OrderID orderID, Decimal qty) {
         auto notification = std::make_shared<OrderNotification>(m, s, orderID, qty, std::optional<orderbook::Error>{});
         n.emplace_back(notification);
     }
 
-    void putTrade(OrderID mID, OrderID tID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) override {
+    void putTrade(OrderID mID, OrderID tID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {
         auto notification = std::make_shared<Trade>(mID, tID, mStatus, tStatus, qty, price);
         n.emplace_back(notification);
     }

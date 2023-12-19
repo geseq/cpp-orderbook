@@ -7,8 +7,6 @@
 
 namespace orderbook {
 
-class OrderBook;
-
 using TradeNotification =
     std::function<void(OrderID mOrderID, OrderID tOrderID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty, Decimal price)>;
 using PostOrderFill = std::function<void(OrderID canceledOrderID)>;
