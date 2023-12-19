@@ -263,7 +263,6 @@ void OrderBook<Notification>::cancelOrder(uint64_t tok, OrderID id) {
     }
 
     notification_.putOrder(MsgType::CancelOrder, OrderStatus::Canceled, id, order->qty);
-    order->release();
 }
 
 template <class Notification>

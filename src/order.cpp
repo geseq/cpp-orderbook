@@ -12,8 +12,4 @@ Decimal Order::getPrice(PriceType pt) {
     return price;
 }
 
-void Order::release() {
-    // TODO: put back in pool
-}
-
 }  // namespace orderbook
