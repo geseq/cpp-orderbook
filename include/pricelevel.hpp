@@ -46,7 +46,7 @@ class PriceLevel {
     PriceTree& price_tree() { return price_tree_; }
 
     OrderQueue* LargestLessThan(const Decimal& price) {
-        auto it = price_tree_.upper_bound(price, PriceCompare());
+        auto it = price_tree_.lower_bound(price, PriceCompare());
         if (it != price_tree_.begin()) {
             --it;
             return &(*it);
@@ -55,7 +55,7 @@ class PriceLevel {
     }
 
     OrderQueue* SmallestGreaterThan(const Decimal& price) {
-        auto it = price_tree_.lower_bound(price, PriceCompare());
+        auto it = price_tree_.upper_bound(price, PriceCompare());
         if (it != price_tree_.end()) {
             return &(*it);
         }

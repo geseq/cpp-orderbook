@@ -54,6 +54,12 @@ void PriceLevel<CompareType>::remove(const std::shared_ptr<Order>& order) {
         q->remove(order);
     }
 
+    if (q->len() == 0) {
+        price_tree_.erase(q->price());
+        --depth_;
+        queue_pool_.release(&*q);
+    }
+
     --num_orders_;
     volume_ -= order->qty;
 }
@@ -61,13 +67,6 @@ void PriceLevel<CompareType>::remove(const std::shared_ptr<Order>& order) {
 template <class CompareType>
 OrderQueue* PriceLevel<CompareType>::getQueue() {
     auto q = price_tree_.begin();
-    while (q != price_tree_.end() && q->len() == 0) {
-        price_tree_.erase(q->price());
-        --depth_;
-        queue_pool_.release(&*q);
-        q = price_tree_.begin();
-    }
-
     if (q != price_tree_.end()) {
         return &*q;
     }
