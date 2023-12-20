@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <sstream>
 
@@ -51,7 +52,7 @@ class OrderBook {
 
     std::atomic_uint64_t matching_ = 1;
 
-    std::shared_ptr<Order> cancelOrder(OrderID id);
+    Decimal cancelOrder(OrderID id);
     void addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag);
     void processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
     void postProcess(Decimal& lp);
@@ -256,39 +257,40 @@ void OrderBook<Notification>::cancelOrder(uint64_t tok, OrderID id) {
         throw std::invalid_argument("invalid token received: cannot maintain determinism");
     }
 
-    auto order = cancelOrder(id);
-    if (order == nullptr) {
+    auto qty = cancelOrder(id);  // an order with 0 qty shouldn't be in the book
+    if (qty.is_zero()) {
         notification_.putOrder(MsgType::CancelOrder, OrderStatus::Rejected, id, uint64_t(0), Error::OrderNotExists);
         return;
     }
 
-    notification_.putOrder(MsgType::CancelOrder, OrderStatus::Canceled, id, order->qty);
+    notification_.putOrder(MsgType::CancelOrder, OrderStatus::Canceled, id, qty);
 }
 
 template <class Notification>
-std::shared_ptr<Order> OrderBook<Notification>::cancelOrder(OrderID id) {
+Decimal OrderBook<Notification>::cancelOrder(OrderID id) {
     if (orders_.find(id, orderbook::OrderIDCompare()) == orders_.end()) {
         // TODO cancel triger
-        return nullptr;
+        return uint64_t(0);
     }
 
     auto it = orders_.find(id, OrderIDCompare());
     if (it != orders_.end()) {
         auto& pool = order_pool_;
-        std::shared_ptr<Order> order(&*it, [&pool](Order* ptr) { pool.release(ptr); });
+        auto* order = &*it;
+        scope_exit defer([&pool, &order]() { pool.release(order); });
         orders_.erase(*it);
 
         if (order->side == Side::Buy) {
             bids_.remove(order);
-            return order;
+            return order->qty;
         }
 
         asks_.remove(order);
 
-        return order;
+        return order->qty;
     }
 
-    return nullptr;
+    return uint64_t(0);
 }
 
 template <class Notification>

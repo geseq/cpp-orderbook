@@ -39,7 +39,7 @@ class PriceLevel {
     Decimal volume();
     OrderQueue* getQueue();
     void append(Order* order);
-    void remove(const std::shared_ptr<Order>& order);
+    void remove(Order* order);
     Decimal processMarketOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal qty, Flag flag);
     Decimal processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID& takerOrderID, Decimal& price, Decimal qty, Flag& flag);
 
