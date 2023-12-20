@@ -10,13 +10,9 @@ namespace test {
 
 class PriceLevelTest : public ::testing::Test {
    protected:
-    void SetUp() override {
-        // Setup code if needed
-    }
+    void SetUp() override {}
 
-    void TearDown() override {
-        // Cleanup code if needed
-    }
+    void TearDown() override {}
 };
 
 TEST_F(PriceLevelTest, TestPriceLevel) {

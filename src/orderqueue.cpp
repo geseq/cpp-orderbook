@@ -37,10 +37,10 @@ void OrderQueue::append(Order* order) {
     ++size_;
 }
 
-std::shared_ptr<Order> OrderQueue::remove(const std::shared_ptr<Order>& o) {
+void OrderQueue::remove(Order* o) {
     total_qty_ = total_qty_ - o->qty;
-    auto prev = o->prev;
-    auto next = o->next;
+    auto* prev = o->prev;
+    auto* next = o->next;
 
     if (prev != nullptr) {
         prev->next = next;
@@ -55,15 +55,13 @@ std::shared_ptr<Order> OrderQueue::remove(const std::shared_ptr<Order>& o) {
 
     --size_;
 
-    if (head_ == o.get()) {
+    if (head_ == o) {
         head_ = next;
     }
 
-    if (tail_ == o.get()) {
+    if (tail_ == o) {
         tail_ = prev;
     }
-
-    return o;
 }
 
 Decimal OrderQueue::process(const TradeNotification& tradeNotification, const PostOrderFill& postFill, OrderID takerOrderID, Decimal qty) {

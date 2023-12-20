@@ -51,7 +51,7 @@ void PriceLevel<CompareType>::remove(const std::shared_ptr<Order>& order) {
 
     auto q = order->queue;
     if (q != nullptr) {
-        q->remove(order);
+        q->remove(order.get());
     }
 
     if (q->len() == 0) {
