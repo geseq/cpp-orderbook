@@ -46,12 +46,12 @@ void PriceLevel<CompareType>::append(Order* order) {
 }
 
 template <class CompareType>
-void PriceLevel<CompareType>::remove(const std::shared_ptr<Order>& order) {
+void PriceLevel<CompareType>::remove(Order* order) {
     auto price = order->getPrice(price_type_);
 
     auto q = order->queue;
     if (q != nullptr) {
-        q->remove(order.get());
+        q->remove(order);
     }
 
     if (q->len() == 0) {

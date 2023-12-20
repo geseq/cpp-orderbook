@@ -47,7 +47,7 @@ TEST_F(PriceLevelTest, TestPriceLevel) {
         FAIL() << "invalid price levels";
     }
 
-    bidLevel.remove(o1);
+    bidLevel.remove(o1.get());
 
     {
         auto regularBegin = tree.begin();
