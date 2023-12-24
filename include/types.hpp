@@ -3,11 +3,11 @@
 #include <cstdint>
 #include <iostream>
 
-#include "udecimal.hpp"
+#include "decimal.hpp"
 
 namespace orderbook {
 
-using Decimal = udecimal::Decimal<8>;
+using Decimal = decimal::U8;
 using OrderID = uint64_t;
 
 enum class Type : uint8_t {

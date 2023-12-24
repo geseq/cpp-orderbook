@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 
-project("orderbook" LANGUAGES CXX)
+set(NAME orderbook)
+project(${NAME} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_COMPILER "/usr/bin/clang++")
@@ -27,19 +28,22 @@ set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF)
 CPMAddPackage( NAME Boost VERSION 1.80.0 GITHUB_REPOSITORY "boostorg/boost" GIT_TAG "boost-1.80.0")
 
-CPMAddPackage( NAME udecimal VERSION 0.6.1 GITHUB_REPOSITORY "geseq/cpp-udecimal" GIT_TAG "v0.7.0")
-CPMAddPackage( NAME pool VERSION 0.6.1 GITHUB_REPOSITORY "geseq/cpp-pool" GIT_TAG "v0.5.0")
+CPMAddPackage( NAME decimal VERSION 1.1.0 GITHUB_REPOSITORY "geseq/cpp-decimal" GIT_TAG "v1.1.0")
+CPMAddPackage( NAME pool VERSION 0.5.0 GITHUB_REPOSITORY "geseq/cpp-pool" GIT_TAG "v0.5.0")
 
-include_directories(udecimal_SOURCE_DIR)
+include_directories(${decimal_SOURCE_DIR})
 include_directories(pool_SOURCE_DIR)
+
+message(STATUS "CMAKE_CXX_STANDARD: ${decimal_SOURCE_DIR}")
+message(STATUS "CMAKE_CXX_STANDARD: ${pool_SOURCE_DIR}")
 
 file(GLOB SOURCES "src/*.cpp")
 
 include_directories(include)
-add_library(orderbook STATIC ${SOURCES})
-target_sources(orderbook INTERFACE include/orderbook.hpp)
-target_include_directories(orderbook INTERFACE include/)
-target_link_libraries(orderbook PRIVATE Boost::intrusive udecimal pool)
+add_library(${NAME} STATIC ${SOURCES})
+target_sources(${NAME} INTERFACE include/orderbook.hpp)
+target_include_directories(${NAME} INTERFACE include/)
+target_link_libraries(${NAME} PRIVATE Boost::intrusive decimal pool)
 
 if (ENABLE_TESTING)
     CPMAddPackage( NAME googletest GITHUB_REPOSITORY google/googletest VERSION 1.14.0 )
@@ -52,10 +56,10 @@ if (ENABLE_TESTING)
         get_filename_component(test_name ${test} NAME)
         message("Adding test: " ${test_name})
         add_executable(${test_name} ${SOURCES} ${PROJECT_SOURCE_DIR}/test/${test_name})
-        target_link_libraries(${test_name} PRIVATE ${CMAKE_THREAD_LIBS_INIT} orderbook gtest gtest_main Boost::algorithm Boost::intrusive udecimal pool)
+        target_link_libraries(${test_name} PRIVATE ${CMAKE_THREAD_LIBS_INIT} ${NAME} gtest gtest_main Boost::algorithm Boost::intrusive decimal pool)
         add_test(${test_name} ${test_name})
         set_property(TEST ${test_name} PROPERTY LABELS "test")
     ENDFOREACH ()
 endif()
 
-target_link_libraries(main PRIVATE Boost::intrusive udecimal pool)
+target_link_libraries(main PRIVATE Boost::intrusive decimal pool)
