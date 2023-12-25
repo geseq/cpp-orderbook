@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <map>
 #include <sstream>
@@ -48,9 +49,9 @@ class OrderBook {
 
     Notification& notification_;
 
-    std::atomic_uint64_t last_token_ = 0;
+    std::atomic<uint64_t> last_token_ = 0;
 
-    std::atomic_uint64_t matching_ = 1;
+    std::atomic<uint64_t> matching_ = 1;
 
     Decimal cancelOrder(OrderID id);
     void addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag);
@@ -63,7 +64,7 @@ class OrderBook {
 template <class Notification>
 void OrderBook<Notification>::addOrder(uint64_t tok, OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag) {
     uint64_t exp = tok - 1;  // technically this should always be single threaded, but just in case.
-    if (!last_token_.compare_exchange_strong(exp, tok)) {
+    if (!last_token_.compare_exchange_strong(exp, tok, std::memory_order_acq_rel, std::memory_order_acquire)) {
         throw std::invalid_argument("invalid token received: cannot maintain determinism");
     }
 
@@ -72,7 +73,7 @@ void OrderBook<Notification>::addOrder(uint64_t tok, OrderID id, Type type, Side
         return;
     }
 
-    if (!matching_) {
+    if (!matching_.load(std::memory_order_acquire)) {
         if (type == Type::Market) {
             notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::NoMatching);
         }

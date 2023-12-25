@@ -9,7 +9,7 @@ class LimitOrderTest : public ::testing::Test {
    protected:
     Notification n;
     std::shared_ptr<OrderBook<Notification>> ob;
-    std::atomic_uint64_t tok = 0;
+    std::atomic<uint64_t> tok = 0;
 
     void SetUp() override {
         tok = 0;
@@ -19,7 +19,7 @@ class LimitOrderTest : public ::testing::Test {
 
     void TearDown() override {}
 
-    void processLine(std::shared_ptr<OrderBook<Notification>> ob, const std::string& line) {
+    void processLine(std::shared_ptr<OrderBook<Notification>>& ob, const std::string& line) {
         std::vector<std::string> parts;
         boost::split(parts, line, boost::is_any_of("\t"));
         if (parts.empty()) {
@@ -44,7 +44,7 @@ class LimitOrderTest : public ::testing::Test {
         ob->addOrder(++tok, oid, type, side, qty, price, trigPrice, flag);
     }
 
-    void processOrders(std::shared_ptr<OrderBook<Notification>> ob, const std::string& input, int prefix) {
+    void processOrders(std::shared_ptr<OrderBook<Notification>>& ob, const std::string& input, int prefix) {
         std::stringstream ss(input);
         std::string line;
 
@@ -60,7 +60,7 @@ class LimitOrderTest : public ::testing::Test {
         }
     }
 
-    void addDepth(std::shared_ptr<OrderBook<Notification>> ob, int prefix = 0) {
+    void addDepth(std::shared_ptr<OrderBook<Notification>>& ob, int prefix = 0) {
         const static std::string depth = R"(
 # add depth to the orderbook
 1	L	B	2	50	0	N

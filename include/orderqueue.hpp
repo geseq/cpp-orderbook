@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 
 #include "boost/intrusive/set_hook.hpp"
 #include "order.hpp"
@@ -19,12 +20,12 @@ class OrderQueue : public boost::intrusive::set_base_hook<boost::intrusive::opti
     uint64_t size_ = 0;
 
    public:
-    OrderQueue(Decimal price) : price_(price){};
-    Decimal price() const;
+    OrderQueue(const Decimal &price) : price_(price){};
+    [[nodiscard]] Decimal price() const;
     uint64_t len();
-    Decimal totalQty() const;
-    Order *head() const;
-    Order *tail() const;
+    [[nodiscard]] Decimal totalQty() const;
+    [[nodiscard]] Order *head() const;
+    [[nodiscard]] Order *tail() const;
     void append(Order *o);
     void remove(Order *o);
     Decimal process(const TradeNotification &tn, const PostOrderFill &postFill, OrderID takerOrderID, Decimal qty);
