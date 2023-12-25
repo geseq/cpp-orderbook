@@ -19,8 +19,8 @@ using orderbook::Type;
 
 class NotificationBase {
    public:
-    virtual ~NotificationBase() {}
-    virtual std::string to_string() const = 0;
+    virtual ~NotificationBase() = default;
+    [[nodiscard]] virtual std::string to_string() const = 0;
 };
 
 struct OrderNotification : public NotificationBase {
@@ -30,16 +30,16 @@ struct OrderNotification : public NotificationBase {
     orderbook::Decimal qty_;
     std::optional<orderbook::Error> error_;
 
-    OrderNotification(orderbook::MsgType msg_type, orderbook::OrderStatus status, orderbook::OrderID order_id, orderbook::Decimal qty,
+    OrderNotification(orderbook::MsgType msg_type, orderbook::OrderStatus status, orderbook::OrderID order_id, orderbook::Decimal& qty,
                       std::optional<orderbook::Error> error)
         : msg_type_(msg_type), status_(status), order_id_(order_id), qty_(qty), error_(error){};
 
-    std::string to_string() const override {
+    [[nodiscard]] std::string to_string() const override {
         std::ostringstream os;
         if (error_.has_value()) {
-            os << msg_type_ << " " << status_ << " " << order_id_ << " " << qty_.to_string() << " Err" << *error_;
+            os << msg_type_ << " " << status_ << " " << order_id_ << " " << qty_ << " Err" << *error_;
         } else {
-            os << msg_type_ << " " << status_ << " " << order_id_ << " " << qty_.to_string();
+            os << msg_type_ << " " << status_ << " " << order_id_ << " " << qty_;
         }
         return os.str();
     }

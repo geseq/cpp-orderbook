@@ -311,7 +311,7 @@ std::string OrderBook<Notification>::toString() {
     auto loop = (b != bids.end() || a != asks.end());
     while (loop) {
         if (b != bids.end()) {
-            ss << b->totalQty().to_string() << "\t" << b->price().to_string();
+            ss << b->totalQty() << "\t" << b->price();
             ++b;
         } else {
             ss << "\t\t\t";
@@ -319,7 +319,7 @@ std::string OrderBook<Notification>::toString() {
 
         ss << " | ";
         if (a != asks.end()) {
-            ss << a->price().to_string() << "\t" << a->totalQty().to_string();
+            ss << a->price() << "\t" << a->totalQty();
             ++a;
         }
 
