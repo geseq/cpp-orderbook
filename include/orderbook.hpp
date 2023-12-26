@@ -20,10 +20,10 @@ class OrderBook {
     OrderBook(NotificationInterface<Notification>& n, size_t price_level_pool_size = 16384, size_t order_pool_size = 16384)
         : order_pool_(order_pool_size),
           notification_(static_cast<Notification&>(n)),
-          bids_(PriceLevel<CmpGreater>(PriceType::Bid, price_level_pool_size)),
-          asks_(PriceLevel<CmpLess>(PriceType::Ask, price_level_pool_size)),
-          trigger_over_(PriceLevel<CmpGreater>(PriceType::Trigger, price_level_pool_size)),
-          trigger_under_(PriceLevel<CmpLess>(PriceType::Trigger, price_level_pool_size)),
+          bids_(PriceLevel<PriceType::Bid>(price_level_pool_size)),
+          asks_(PriceLevel<PriceType::Ask>(price_level_pool_size)),
+          trigger_over_(PriceLevel<PriceType::TriggerOver>(price_level_pool_size)),
+          trigger_under_(PriceLevel<PriceType::TriggerUnder>(price_level_pool_size)),
           orders_(OrderMap()),
           trig_orders_(OrderMap()){};
 
@@ -39,10 +39,10 @@ class OrderBook {
    private:
     pool::AdaptiveObjectPool<Order> order_pool_;
 
-    PriceLevel<CmpGreater> bids_;
-    PriceLevel<CmpLess> asks_;
-    PriceLevel<CmpGreater> trigger_over_;
-    PriceLevel<CmpLess> trigger_under_;
+    PriceLevel<PriceType::Bid> bids_;
+    PriceLevel<PriceType::Ask> asks_;
+    PriceLevel<PriceType::TriggerOver> trigger_over_;
+    PriceLevel<PriceType::TriggerUnder> trigger_under_;
 
     OrderMap orders_;
     OrderMap trig_orders_;

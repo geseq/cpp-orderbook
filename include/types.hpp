@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cwchar>
 #include <iostream>
 
 #include "decimal.hpp"
@@ -44,7 +45,8 @@ std::ostream& operator<<(std::ostream& os, const OrderStatus& status);
 enum class PriceType {
     Bid,
     Ask,
-    Trigger,
+    TriggerOver,
+    TriggerUnder,
 };
 
 std::ostream& operator<<(std::ostream& os, const PriceType& priceType);

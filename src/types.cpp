@@ -54,8 +54,10 @@ std::ostream& operator<<(std::ostream& os, const PriceType& priceType) {
             return os << "Bid";
         case PriceType::Ask:
             return os << "Ask";
-        case PriceType::Trigger:
-            return os << "Trigger";
+        case PriceType::TriggerOver:
+            return os << "TriggerOver";
+        case PriceType::TriggerUnder:
+            return os << "TriggerUnder";
     }
     return os << "Unknown";
 }

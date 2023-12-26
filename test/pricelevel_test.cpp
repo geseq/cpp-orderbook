@@ -16,7 +16,7 @@ class PriceLevelTest : public ::testing::Test {
 };
 
 TEST_F(PriceLevelTest, TestPriceLevel) {
-    PriceLevel<CmpLess> bidLevel(PriceType::Bid, 10);
+    PriceLevel<PriceType::Bid> bidLevel(10);
 
     auto o1 = std::make_shared<Order>(1, Type::Limit, Side::Buy, Decimal(10, 0), Decimal(10, 0), Decimal(uint64_t(0)), Flag::None);
     auto o2 = std::make_shared<Order>(2, Type::Limit, Side::Buy, Decimal(10, 0), Decimal(20, 0), Decimal(uint64_t(0)), Flag::None);
@@ -43,9 +43,10 @@ TEST_F(PriceLevelTest, TestPriceLevel) {
     ASSERT_EQ(bidLevel.depth(), 2);
     ASSERT_EQ(bidLevel.len(), 2);
 
-    if (tree.begin()->head() != o1.get() || tree.begin()->tail() != o1.get() || tree.rbegin()->head() != o2.get() || tree.rbegin()->tail() != o2.get()) {
-        FAIL() << "invalid price levels";
-    }
+    ASSERT_EQ(tree.begin()->head(), o2.get()) << "Invalid price levels: head of the first element does not match o1";
+    ASSERT_EQ(tree.begin()->tail(), o2.get()) << "Invalid price levels: tail of the first element does not match o1";
+    ASSERT_EQ(tree.rbegin()->head(), o1.get()) << "Invalid price levels: head of the last element does not match o2";
+    ASSERT_EQ(tree.rbegin()->tail(), o1.get()) << "Invalid price levels: tail of the last element does not match o2";
 
     bidLevel.remove(o1.get());
 
@@ -62,7 +63,7 @@ TEST_F(PriceLevelTest, TestPriceLevel) {
 }
 
 TEST_F(PriceLevelTest, TestPriceFinding) {
-    PriceLevel<CmpLess> askLevel(PriceType::Ask, 10);
+    PriceLevel<PriceType::Ask> askLevel(10);
 
     askLevel.append(new Order(1, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(130, 0), Decimal(uint64_t(0)), Flag::None));
     askLevel.append(new Order(2, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(170, 0), Decimal(uint64_t(0)), Flag::None));
@@ -75,17 +76,17 @@ TEST_F(PriceLevelTest, TestPriceFinding) {
 
     ASSERT_EQ(askLevel.volume(), Decimal(40, 0));
 
-    ASSERT_EQ(askLevel.LargestLessThan(Decimal(101, 0))->price(), Decimal(100, 0));
-    ASSERT_EQ(askLevel.LargestLessThan(Decimal(150, 0))->price(), Decimal(140, 0));
-    ASSERT_EQ(askLevel.LargestLessThan(Decimal(100, 0)), nullptr);
+    ASSERT_EQ(askLevel.largestLessThan(Decimal(101, 0))->price(), Decimal(100, 0));
+    ASSERT_EQ(askLevel.largestLessThan(Decimal(150, 0))->price(), Decimal(140, 0));
+    ASSERT_EQ(askLevel.largestLessThan(Decimal(100, 0)), nullptr);
 
-    ASSERT_EQ(askLevel.SmallestGreaterThan(Decimal(169, 0))->price(), Decimal(170, 0));
-    ASSERT_EQ(askLevel.SmallestGreaterThan(Decimal(150, 0))->price(), Decimal(160, 0));
-    ASSERT_EQ(askLevel.SmallestGreaterThan(Decimal(170, 0)), nullptr);
+    ASSERT_EQ(askLevel.smallestGreaterThan(Decimal(169, 0))->price(), Decimal(170, 0));
+    ASSERT_EQ(askLevel.smallestGreaterThan(Decimal(150, 0))->price(), Decimal(160, 0));
+    ASSERT_EQ(askLevel.smallestGreaterThan(Decimal(170, 0)), nullptr);
 }
 
 TEST_F(PriceLevelTest, TestStopQueuePriceFinding) {
-    PriceLevel<CmpLess> trigLevel(PriceType::Trigger, 10);
+    PriceLevel<PriceType::TriggerUnder> trigLevel(10);
 
     trigLevel.append(new Order(1, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(10, 0), Decimal(130, 0), Flag::None));
     trigLevel.append(new Order(2, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(20, 0), Decimal(170, 0), Flag::None));
@@ -98,13 +99,15 @@ TEST_F(PriceLevelTest, TestStopQueuePriceFinding) {
 
     ASSERT_EQ(trigLevel.volume(), Decimal(40, 0));
 
-    ASSERT_EQ(trigLevel.LargestLessThan(Decimal(101, 0))->price(), Decimal(100, 0));
-    ASSERT_EQ(trigLevel.LargestLessThan(Decimal(150, 0))->price(), Decimal(140, 0));
-    ASSERT_EQ(trigLevel.LargestLessThan(Decimal(100, 0)), nullptr);
+    std::cout << 1 << std::endl;
+    ASSERT_EQ(trigLevel.largestLessThan(Decimal(101, 0))->price(), Decimal(100, 0));
+    std::cout << 2 << std::endl;
+    ASSERT_EQ(trigLevel.largestLessThan(Decimal(150, 0))->price(), Decimal(140, 0));
+    ASSERT_EQ(trigLevel.largestLessThan(Decimal(100, 0)), nullptr);
 
-    ASSERT_EQ(trigLevel.SmallestGreaterThan(Decimal(169, 0))->price(), Decimal(170, 0));
-    ASSERT_EQ(trigLevel.SmallestGreaterThan(Decimal(150, 0))->price(), Decimal(160, 0));
-    ASSERT_EQ(trigLevel.SmallestGreaterThan(Decimal(170, 0)), nullptr);
+    ASSERT_EQ(trigLevel.smallestGreaterThan(Decimal(169, 0))->price(), Decimal(170, 0));
+    ASSERT_EQ(trigLevel.smallestGreaterThan(Decimal(150, 0))->price(), Decimal(160, 0));
+    ASSERT_EQ(trigLevel.smallestGreaterThan(Decimal(170, 0)), nullptr);
 }
 
 }  // namespace test

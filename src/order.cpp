@@ -5,7 +5,7 @@
 namespace orderbook {
 
 Decimal Order::getPrice(PriceType pt) {
-    if (pt == PriceType::Trigger) {
+    if (pt == PriceType::TriggerOver || pt == PriceType::TriggerUnder) [[unlikely]] {
         return trig_price;
     }
 
