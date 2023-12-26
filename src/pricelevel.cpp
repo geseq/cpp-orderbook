@@ -12,23 +12,23 @@
 
 namespace orderbook {
 
-template <class CompareType>
-uint64_t PriceLevel<CompareType>::len() {
+template <PriceType P>
+uint64_t PriceLevel<P>::len() {
     return num_orders_;
 }
 
-template <class CompareType>
-uint64_t PriceLevel<CompareType>::depth() {
+template <PriceType P>
+uint64_t PriceLevel<P>::depth() {
     return depth_;
 }
 
-template <class CompareType>
-Decimal PriceLevel<CompareType>::volume() {
+template <PriceType P>
+Decimal PriceLevel<P>::volume() {
     return volume_;
 }
 
-template <class CompareType>
-void PriceLevel<CompareType>::append(Order* order) {
+template <PriceType P>
+void PriceLevel<P>::append(Order* order) {
     auto price = order->getPrice(price_type_);
 
     auto it = price_tree_.find(price);
@@ -45,8 +45,8 @@ void PriceLevel<CompareType>::append(Order* order) {
     q->append(order);
 }
 
-template <class CompareType>
-void PriceLevel<CompareType>::remove(Order* order) {
+template <PriceType P>
+void PriceLevel<P>::remove(Order* order) {
     auto price = order->getPrice(price_type_);
 
     auto q = order->queue;
@@ -64,8 +64,8 @@ void PriceLevel<CompareType>::remove(Order* order) {
     volume_ -= order->qty;
 }
 
-template <class CompareType>
-OrderQueue* PriceLevel<CompareType>::getQueue() {
+template <PriceType P>
+OrderQueue* PriceLevel<P>::getQueue() {
     auto q = price_tree_.begin();
     if (q != price_tree_.end()) {
         return &*q;
@@ -74,8 +74,8 @@ OrderQueue* PriceLevel<CompareType>::getQueue() {
     return nullptr;
 }
 
-template <class CompareType>
-Decimal PriceLevel<CompareType>::processMarketOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal qty, Flag flag) {
+template <PriceType P>
+Decimal PriceLevel<P>::processMarketOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal qty, Flag flag) {
     // TODO: this won't work as pricelevel volumes aren't accounted for correctly
     if ((flag & (AoN | FoK)) != 0 && qty > volume_) {
         return uint64_t(0);
@@ -92,9 +92,8 @@ Decimal PriceLevel<CompareType>::processMarketOrder(const TradeNotification& tn,
     return uint64_t(0);
 };
 
-template <class CompareType>
-Decimal PriceLevel<CompareType>::processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID& takerOrderID, Decimal& price, Decimal qty,
-                                                   Flag& flag) {
+template <PriceType P>
+Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID& takerOrderID, Decimal& price, Decimal qty, Flag& flag) {
     Decimal qtyProcessed = {};
     auto orderQueue = getQueue();
 
@@ -127,7 +126,7 @@ Decimal PriceLevel<CompareType>::processLimitOrder(const TradeNotification& tn, 
                     break;
                 }
                 aQty -= orderQueue->totalQty();
-                orderQueue = GetNextQueue(orderQueue->price());
+                orderQueue = getNextQueue(orderQueue->price());
             }
         } else {
             while (orderQueue != nullptr && price > orderQueue->price()) {
@@ -136,7 +135,7 @@ Decimal PriceLevel<CompareType>::processLimitOrder(const TradeNotification& tn, 
                     break;
                 }
                 aQty -= orderQueue->totalQty();
-                orderQueue = GetNextQueue(orderQueue->price());
+                orderQueue = getNextQueue(orderQueue->price());
             }
         }
 
@@ -157,7 +156,40 @@ Decimal PriceLevel<CompareType>::processLimitOrder(const TradeNotification& tn, 
     return qtyProcessed;
 };
 
-template class PriceLevel<CmpGreater>;
-template class PriceLevel<CmpLess>;
+template <PriceType P>
+OrderQueue* PriceLevel<P>::largestLessThan(const Decimal& price) {
+    auto it = price_tree_.lower_bound(price, PriceCompare());
+    if (it != price_tree_.begin()) {
+        --it;
+        return &(*it);
+    }
+    return nullptr;
+}
+
+template <PriceType P>
+OrderQueue* PriceLevel<P>::smallestGreaterThan(const Decimal& price) {
+    auto it = price_tree_.upper_bound(price, PriceCompare());
+    if (it != price_tree_.end()) {
+        return &(*it);
+    }
+    return nullptr;
+}
+
+template <PriceType P>
+OrderQueue* PriceLevel<P>::getNextQueue(const Decimal& price) {
+    switch (price_type_) {
+        case PriceType::Bid:
+            return largestLessThan(price);
+        case PriceType::Ask:
+            return smallestGreaterThan(price);
+        default:
+            throw std::runtime_error("invalid call to GetQueue");
+    }
+}
+
+template class PriceLevel<PriceType::Bid>;
+template class PriceLevel<PriceType::Ask>;
+template class PriceLevel<PriceType::TriggerOver>;
+template class PriceLevel<PriceType::TriggerUnder>;
 
 }  // namespace orderbook

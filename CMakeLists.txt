@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 
+find_program(CCACHE_PROGRAM ccache)
+if (CCACHE_PROGRAM)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+endif()
+
 set(CPP_ORDERBOOK orderbook)
 project(${CPP_ORDERBOOK} LANGUAGES CXX)
 

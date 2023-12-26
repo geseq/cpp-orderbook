@@ -16,6 +16,7 @@ class OrderQueue : public boost::intrusive::set_base_hook<boost::intrusive::opti
     Order *head_ = nullptr;
     Order *tail_ = nullptr;
 
+    Decimal price_;
     Decimal total_qty_;
     uint64_t size_ = 0;
 
@@ -30,11 +31,11 @@ class OrderQueue : public boost::intrusive::set_base_hook<boost::intrusive::opti
     void remove(Order *o);
     Decimal process(const TradeNotification &tn, const PostOrderFill &postFill, OrderID takerOrderID, Decimal qty);
 
-    Decimal price_;
-
     friend bool operator<(const OrderQueue &a, const OrderQueue &b) { return a.price_ < b.price_; }
     friend bool operator>(const OrderQueue &a, const OrderQueue &b) { return a.price_ > b.price_; }
     friend bool operator==(const OrderQueue &a, const OrderQueue &b) { return a.price_ == b.price_; }
+
+    friend class PriceCompare;
 };
 
 struct PriceCompare {
