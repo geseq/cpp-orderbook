@@ -2,10 +2,13 @@
 
 #include <iostream>
 
+#include "types.hpp"
+
 namespace orderbook {
 
-Decimal Order::getPrice(PriceType pt) {
-    if (pt == PriceType::TriggerOver || pt == PriceType::TriggerUnder) [[unlikely]] {
+template <PriceType pt>
+Decimal Order::getPrice() {
+    if constexpr (pt == PriceType::TriggerOver || pt == PriceType::TriggerUnder) {
         return trig_price;
     }
 

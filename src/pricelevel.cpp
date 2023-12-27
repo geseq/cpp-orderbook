@@ -29,7 +29,7 @@ Decimal PriceLevel<P>::volume() {
 
 template <PriceType P>
 void PriceLevel<P>::append(Order* order) {
-    auto price = order->getPrice(price_type_);
+    auto price = order->getPrice<P>();
 
     auto it = price_tree_.find(price);
     auto q = &*it;
@@ -47,7 +47,7 @@ void PriceLevel<P>::append(Order* order) {
 
 template <PriceType P>
 void PriceLevel<P>::remove(Order* order) {
-    auto price = order->getPrice(price_type_);
+    auto price = order->getPrice<P>();
 
     auto q = order->queue;
     if (q != nullptr) {
