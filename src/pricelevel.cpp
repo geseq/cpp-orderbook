@@ -9,6 +9,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <type_traits>
 
 namespace orderbook {
 
@@ -75,7 +76,9 @@ OrderQueue* PriceLevel<P>::getQueue() {
 }
 
 template <PriceType P>
+template <PriceType Q>
 Decimal PriceLevel<P>::processMarketOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal qty, Flag flag) {
+    static_assert(Q == PriceType::Bid || Q == PriceType::Ask, "Unsupported PriceType");
     // TODO: this won't work as pricelevel volumes aren't accounted for correctly
     if ((flag & (AoN | FoK)) != 0 && qty > volume_) {
         return uint64_t(0);
@@ -93,7 +96,9 @@ Decimal PriceLevel<P>::processMarketOrder(const TradeNotification& tn, const Pos
 };
 
 template <PriceType P>
-Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID& takerOrderID, Decimal& price, Decimal qty, Flag& flag) {
+template <PriceType Q>
+Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal price, Decimal qty, Flag flag) {
+    static_assert(Q == PriceType::Bid || Q == PriceType::Ask, "Unsupported PriceType");
     Decimal qtyProcessed = {};
     auto orderQueue = getQueue();
 
@@ -176,14 +181,14 @@ OrderQueue* PriceLevel<P>::smallestGreaterThan(const Decimal& price) {
 }
 
 template <PriceType P>
+template <PriceType Q>
 OrderQueue* PriceLevel<P>::getNextQueue(const Decimal& price) {
-    switch (price_type_) {
-        case PriceType::Bid:
-            return largestLessThan(price);
-        case PriceType::Ask:
-            return smallestGreaterThan(price);
-        default:
-            throw std::runtime_error("invalid call to GetQueue");
+    if constexpr (Q == PriceType::Bid) {
+        return largestLessThan(price);
+    } else if constexpr (Q == PriceType::Ask) {
+        return smallestGreaterThan(price);
+    } else {
+        static_assert(Q == PriceType::Bid || Q == PriceType::Ask, "Unsupported PriceType");
     }
 }
 
@@ -191,5 +196,17 @@ template class PriceLevel<PriceType::Bid>;
 template class PriceLevel<PriceType::Ask>;
 template class PriceLevel<PriceType::TriggerOver>;
 template class PriceLevel<PriceType::TriggerUnder>;
+
+template Decimal PriceLevel<PriceType::Bid>::processMarketOrder<PriceType::Bid>(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID,
+                                                                                Decimal qty, Flag flag);
+
+template Decimal PriceLevel<PriceType::Ask>::processMarketOrder<PriceType::Ask>(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID,
+                                                                                Decimal qty, Flag flag);
+
+template Decimal PriceLevel<PriceType::Bid>::processLimitOrder<PriceType::Bid>(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID,
+                                                                               Decimal price, Decimal qty, Flag flag);
+
+template Decimal PriceLevel<PriceType::Ask>::processLimitOrder<PriceType::Ask>(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID,
+                                                                               Decimal price, Decimal qty, Flag flag);
 
 }  // namespace orderbook
