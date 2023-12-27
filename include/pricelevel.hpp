@@ -8,6 +8,7 @@
 #include "boost/intrusive/rbtree.hpp"
 #include "orderqueue.hpp"
 #include "pool.hpp"
+#include "types.hpp"
 
 namespace orderbook {
 
@@ -39,15 +40,20 @@ class PriceLevel {
     uint64_t depth();
     Decimal volume();
     [[nodiscard]] OrderQueue* getQueue();
-    [[nodiscard]] OrderQueue* getNextQueue(const Decimal& price);
     [[nodiscard]] OrderQueue* largestLessThan(const Decimal& price);
     [[nodiscard]] OrderQueue* smallestGreaterThan(const Decimal& price);
 
     void append(Order* order);
     void remove(Order* order);
 
+    template <PriceType Q = P>
+    [[nodiscard]] OrderQueue* getNextQueue(const Decimal& price);
+
+    template <PriceType Q = P>
     Decimal processMarketOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal qty, Flag flag);
-    Decimal processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID& takerOrderID, Decimal& price, Decimal qty, Flag& flag);
+
+    template <PriceType Q = P>
+    Decimal processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal price, Decimal qty, Flag flag);
 
     PriceTree& price_tree() { return price_tree_; };
 };

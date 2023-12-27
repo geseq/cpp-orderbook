@@ -64,16 +64,16 @@ class OrderBook {
 template <class Notification>
 void OrderBook<Notification>::addOrder(uint64_t tok, OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag) {
     uint64_t exp = tok - 1;  // technically this should always be single threaded, but just in case.
-    if (!last_token_.compare_exchange_strong(exp, tok, std::memory_order_acq_rel, std::memory_order_acquire)) {
+    if (!last_token_.compare_exchange_strong(exp, tok, std::memory_order_acq_rel, std::memory_order_acquire)) [[unlikely]] {
         throw std::invalid_argument("invalid token received: cannot maintain determinism");
     }
 
-    if (qty.is_zero()) {
+    if (qty.is_zero()) [[unlikely]] {
         notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::InvalidQty);
         return;
     }
 
-    if (!matching_.load(std::memory_order_acquire)) {
+    if (!matching_.load(std::memory_order_acquire)) [[unlikely]] {
         if (type == Type::Market) {
             notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::NoMatching);
         }
@@ -93,7 +93,7 @@ void OrderBook<Notification>::addOrder(uint64_t tok, OrderID id, Type type, Side
         }
     }
 
-    if ((flag & (Flag::StopLoss | Flag::TakeProfit)) != 0) {
+    if ((flag & (Flag::StopLoss | Flag::TakeProfit)) != 0) [[unlikely]] {
         if (trigPrice.is_zero()) {
             notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::InvalidTriggerPrice);
             return;
@@ -254,7 +254,7 @@ void OrderBook<Notification>::putTradeNotification(OrderID mOrderID, OrderID tOr
 template <class Notification>
 void OrderBook<Notification>::cancelOrder(uint64_t tok, OrderID id) {
     uint64_t exp = tok - 1;
-    if (!last_token_.compare_exchange_strong(exp, tok)) {
+    if (!last_token_.compare_exchange_strong(exp, tok, std::memory_order_acq_rel, std::memory_order_acquire)) [[unlikely]] {
         throw std::invalid_argument("invalid token received: cannot maintain determinism");
     }
 

@@ -30,7 +30,14 @@ struct Order : public boost::intrusive::set_base_hook<boost::intrusive::optimize
     Order(OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trig_price, Flag flag)
         : id(id), qty(qty), price(price), trig_price(trig_price), type(type), side(side), flag(flag){};
 
-    Decimal getPrice(PriceType pt);
+    template <PriceType pt>
+    Decimal getPrice() {
+        if constexpr (pt == PriceType::TriggerOver || pt == PriceType::TriggerUnder) {
+            return trig_price;
+        }
+
+        return price;
+    }
 
     friend bool operator<(const Order &a, const Order &b) { return a.id < b.id; }
     friend bool operator>(const Order &a, const Order &b) { return a.id > b.id; }
