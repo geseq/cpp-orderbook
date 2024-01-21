@@ -60,4 +60,4 @@ if (ENABLE_TESTING)
     ENDFOREACH ()
 endif()
 
-target_link_libraries(main PRIVATE Boost::intrusive decimal pool)
+target_link_libraries(main PRIVATE ${CPP_ORDERBOOK} Boost::intrusive decimal pool)
