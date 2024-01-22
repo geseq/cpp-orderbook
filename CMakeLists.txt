@@ -21,6 +21,7 @@ option(ENABLE_TESTING "Enable test target generation" OFF)
 
 add_executable (main main.cpp)
 
+set(CPM_USE_LOCAL_PACKAGES ON)
 include(cmake/CPM.cmake)
 CPMUsePackageLock(package-lock.cmake)
 
@@ -60,4 +61,4 @@ if (ENABLE_TESTING)
     ENDFOREACH ()
 endif()
 
-target_link_libraries(main PRIVATE Boost::intrusive decimal pool)
+target_link_libraries(main PRIVATE ${CPP_ORDERBOOK} Boost::intrusive decimal pool)
