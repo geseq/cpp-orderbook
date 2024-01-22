@@ -2,7 +2,7 @@
 #include <chrono>
 #include <iomanip>
 #include <iostream>
-#include <locale>kkkk
+#include <locale>
 #include <random>
 #include <sstream>
 #include <string>
@@ -93,7 +93,7 @@ void throughput(int64_t seed, int duration, orderbook::Decimal lowerBound, order
         ob->addOrder(buyID, buyID, Type::Limit, Side::Buy, bidQty, bid, Decimal(0, 0), Flag::None);
         ob->addOrder(sellID, sellID, Type::Limit, Side::Sell, askQty, ask, Decimal(0, 0), Flag::None);
 
-        operations += 4;
+        operations += 4;  // 2 cancels + 2 adds
     }
 
     auto finish = std::chrono::steady_clock::now();

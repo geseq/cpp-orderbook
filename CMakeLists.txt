@@ -21,6 +21,7 @@ option(ENABLE_TESTING "Enable test target generation" OFF)
 
 add_executable (main main.cpp)
 
+set(CPM_USE_LOCAL_PACKAGES ON)
 include(cmake/CPM.cmake)
 CPMUsePackageLock(package-lock.cmake)
 
