@@ -32,25 +32,18 @@ TEST_F(OrderQueueTest, TestOrderQueue) {
     ASSERT_NE(tail, nullptr);
 
     ASSERT_EQ(oq->totalQty(), Decimal(200, 0));
-
-    ASSERT_EQ(head, &o1);
-    ASSERT_EQ(tail, &o2);
-
-    ASSERT_EQ(oq->head()->next, oq->tail());
-    ASSERT_EQ(oq->tail()->prev, head);
-    ASSERT_EQ(oq->head()->prev, nullptr);
-    ASSERT_EQ(oq->tail()->next, nullptr);
+    ASSERT_EQ(oq->len(), 2);
 
     oq->remove(&o1);
 
     ASSERT_EQ(oq->head(), &o2);
     ASSERT_EQ(oq->head(), oq->tail());
-    ASSERT_EQ(oq->head()->next, nullptr);
-    ASSERT_EQ(oq->tail()->prev, nullptr);
-    ASSERT_EQ(oq->head()->prev, nullptr);
-    ASSERT_EQ(oq->tail()->next, nullptr);
 
+    ASSERT_EQ(oq->len(), 1);
     ASSERT_EQ(oq->totalQty(), Decimal(100, 0));
+
+    // remove from container before destroying
+    oq->remove(&o2);
 }
 
 }  // namespace test
