@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 
+#include "boost/intrusive/list.hpp"
 #include "boost/intrusive/set_hook.hpp"
 #include "order.hpp"
 
@@ -12,21 +13,21 @@ using TradeNotification =
     std::function<void(OrderID mOrderID, OrderID tOrderID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty, Decimal price)>;
 using PostOrderFill = std::function<void(OrderID canceledOrderID)>;
 
+using OrderList = boost::intrusive::list<Order>;
+
 class OrderQueue : public boost::intrusive::set_base_hook<boost::intrusive::optimize_size<false>> {
-    Order *head_ = nullptr;
-    Order *tail_ = nullptr;
+    OrderList orders_;
 
     Decimal price_;
     Decimal total_qty_;
-    uint64_t size_ = 0;
 
    public:
     OrderQueue(const Decimal &price) : price_(price){};
     [[nodiscard]] Decimal price() const;
     uint64_t len();
     [[nodiscard]] Decimal totalQty() const;
-    [[nodiscard]] Order *head() const;
-    [[nodiscard]] Order *tail() const;
+    [[nodiscard]] Order *head();
+    [[nodiscard]] Order *tail();
     void append(Order *o);
     void remove(Order *o);
     Decimal process(const TradeNotification &tn, const PostOrderFill &postFill, OrderID takerOrderID, Decimal qty);

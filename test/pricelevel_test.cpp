@@ -60,6 +60,9 @@ TEST_F(PriceLevelTest, TestPriceLevel) {
         // Check if there's only one element
         ASSERT_TRUE(++regularBegin == tree.end());
     }
+
+    // remove from the tree before o2 is destroyed
+    bidLevel.remove(o2.get());
 }
 
 TEST_F(PriceLevelTest, TestPriceFinding) {
