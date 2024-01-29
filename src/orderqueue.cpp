@@ -10,10 +10,6 @@
 
 namespace orderbook {
 
-Order* OrderQueue::head() { return &orders_.front(); }
-
-Order* OrderQueue::tail() { return &orders_.back(); }
-
 Decimal OrderQueue::price() const { return price_; }
 
 Decimal OrderQueue::totalQty() const { return total_qty_; }

@@ -43,10 +43,10 @@ TEST_F(PriceLevelTest, TestPriceLevel) {
     ASSERT_EQ(bidLevel.depth(), 2);
     ASSERT_EQ(bidLevel.len(), 2);
 
-    ASSERT_EQ(tree.begin()->head(), o2.get()) << "Invalid price levels: head of the first element does not match o1";
-    ASSERT_EQ(tree.begin()->tail(), o2.get()) << "Invalid price levels: tail of the first element does not match o1";
-    ASSERT_EQ(tree.rbegin()->head(), o1.get()) << "Invalid price levels: head of the last element does not match o2";
-    ASSERT_EQ(tree.rbegin()->tail(), o1.get()) << "Invalid price levels: tail of the last element does not match o2";
+    ASSERT_EQ(&tree.begin()->order_list().front(), o2.get()) << "Invalid price levels: head of the first element does not match o1";
+    ASSERT_EQ(&tree.begin()->order_list().back(), o2.get()) << "Invalid price levels: tail of the first element does not match o1";
+    ASSERT_EQ(&tree.rbegin()->order_list().front(), o1.get()) << "Invalid price levels: head of the last element does not match o2";
+    ASSERT_EQ(&tree.rbegin()->order_list().back(), o1.get()) << "Invalid price levels: tail of the last element does not match o2";
 
     bidLevel.remove(o1.get());
 
