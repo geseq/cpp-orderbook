@@ -4,9 +4,7 @@
 
 #include "util.cpp"
 
-namespace orderbook {
-
-namespace test {
+namespace orderbook::test {
 
 class OrderQueueTest : public ::testing::Test {
    protected:
@@ -25,8 +23,8 @@ TEST_F(OrderQueueTest, TestOrderQueue) {
     oq->append(&o1);
     oq->append(&o2);
 
-    auto* head = oq->head();
-    auto* tail = oq->tail();
+    auto* head = &oq->order_list().front();
+    auto* tail = &oq->order_list().back();
 
     ASSERT_NE(head, nullptr);
     ASSERT_NE(tail, nullptr);
@@ -36,8 +34,8 @@ TEST_F(OrderQueueTest, TestOrderQueue) {
 
     oq->remove(&o1);
 
-    ASSERT_EQ(oq->head(), &o2);
-    ASSERT_EQ(oq->head(), oq->tail());
+    ASSERT_EQ(&oq->order_list().front(), &o2);
+    ASSERT_EQ(oq->order_list().front(), oq->order_list().back());
 
     ASSERT_EQ(oq->len(), 1);
     ASSERT_EQ(oq->totalQty(), Decimal(100, 0));
@@ -46,6 +44,5 @@ TEST_F(OrderQueueTest, TestOrderQueue) {
     oq->remove(&o2);
 }
 
-}  // namespace test
-}  // namespace orderbook
+}  // namespace orderbook::test
 

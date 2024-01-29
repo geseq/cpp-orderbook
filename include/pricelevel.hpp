@@ -55,7 +55,7 @@ class PriceLevel {
     template <PriceType Q = P>
     Decimal processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal price, Decimal qty, Flag flag);
 
-    PriceTree& price_tree() { return price_tree_; };
+    const PriceTree& price_tree() const { return price_tree_; };
 };
 
 }  // namespace orderbook
