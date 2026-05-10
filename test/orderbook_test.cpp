@@ -9,10 +9,8 @@ class LimitOrderTest : public ::testing::Test {
    protected:
     Notification n;
     std::shared_ptr<OrderBook<Notification>> ob;
-    std::atomic<uint64_t> tok = 0;
 
     void SetUp() override {
-        tok = 0;
         n = Notification();
         ob = std::make_shared<orderbook::OrderBook<Notification>>(n);
     }
@@ -31,17 +29,16 @@ class LimitOrderTest : public ::testing::Test {
         Side side = (parts[2] == "S") ? orderbook::Side::Sell : orderbook::Side::Buy;
         Decimal qty = parts[3];
         Decimal price = parts[4];
-        Decimal trigPrice = parts[5];
         Flag flag = orderbook::Flag::None;
-        if (parts[6] == "A") {
+        if (parts[5] == "A") {
             flag = orderbook::AoN;
-        } else if (parts[6] == "I") {
+        } else if (parts[5] == "I") {
             flag = orderbook::IoC;
-        } else if (parts[6] == "F") {
+        } else if (parts[5] == "F") {
             flag = orderbook::FoK;
         }
 
-        ob->addOrder(++tok, oid, type, side, qty, price, trigPrice, flag);
+        ob->addOrder(oid, type, side, qty, price, flag);
     }
 
     void processOrders(std::shared_ptr<OrderBook<Notification>>& ob, const std::string& input, int prefix) {
@@ -63,16 +60,16 @@ class LimitOrderTest : public ::testing::Test {
     void addDepth(std::shared_ptr<OrderBook<Notification>>& ob, int prefix = 0) {
         const static std::string depth = R"(
 # add depth to the orderbook
-1	L	B	2	50	0	N
-2	L	B	2	60	0	N
-3	L	B	2	70	0	N
-4	L	B	2	80	0	N
-5	L	B	2	90	0	N
-6	L	S	2	100	0	N
-7	L	S	2	110	0	N
-8	L	S	2	120	0	N
-9	L	S	2	130	0	N
-10	L	S	2	140	0	N
+1	L	B	2	50	N
+2	L	B	2	60	N
+3	L	B	2	70	N
+4	L	B	2	80	N
+5	L	B	2	90	N
+6	L	S	2	100	N
+7	L	S	2	110	N
+8	L	S	2	120	N
+9	L	S	2	130	N
+10	L	S	2	140	N
 )";
 
         processOrders(ob, depth, prefix);
@@ -82,13 +79,13 @@ class LimitOrderTest : public ::testing::Test {
 TEST_F(LimitOrderTest, TestLimitOrder_Create) {
     for (int i = 50; i < 100; i += 10) {
         n.Reset();
-        processLine(ob, std::to_string(i) + "	L	B	2	" + std::to_string(i) + "	0	N");
+        processLine(ob, std::to_string(i) + "	L	B	2	" + std::to_string(i) + "	N");
         n.Verify({"CreateOrder Accepted " + std::to_string(i) + " 2"});
     }
 
     for (int i = 100; i < 150; i += 10) {
         n.Reset();
-        processLine(ob, std::to_string(i) + "	L	S	2	" + std::to_string(i) + "	0	N");
+        processLine(ob, std::to_string(i) + "	L	S	2	" + std::to_string(i) + "	N");
         n.Verify({"CreateOrder Accepted " + std::to_string(i) + " 2"});
     }
 
@@ -100,11 +97,11 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateBuy) {
     addDepth(ob);
 
     n.Reset();
-    processLine(ob, "1100	L	B	1	100	0	N");
+    processLine(ob, "1100	L	B	1	100	N");
     n.Verify({"CreateOrder Accepted 1100 1", "6 1100 FilledPartial FilledComplete 1 100"});
 
     n.Reset();
-    processLine(ob, "1150	L	B	10	150	0	N");
+    processLine(ob, "1150	L	B	10	150	N");
     // clang-format off
     n.Verify({"CreateOrder Accepted 1150 10", 
           "6 1150 FilledComplete FilledPartial 1 100", 
@@ -119,7 +116,7 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateWithZeroQty) {
     addDepth(ob);
 
     n.Reset();
-    processLine(ob, "170	L	S	0	40	0	N");
+    processLine(ob, "170	L	S	0	40	N");
     n.Verify({"CreateOrder Rejected 170 0 ErrInvalidQty"});
 }
 
@@ -127,7 +124,7 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateWithZeroPrice) {
     addDepth(ob);
 
     n.Reset();
-    processLine(ob, "170	L	S	10	0	0	N");
+    processLine(ob, "170	L	S	10	0	N");
     n.Verify({"CreateOrder Rejected 170 0 ErrInvalidPrice"});
 }
 
@@ -135,8 +132,8 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateAndCancel) {
     addDepth(ob);
 
     n.Reset();
-    processLine(ob, "170	L	S	10	1000	0	N");
-    ob->cancelOrder(++tok, 170);
+    processLine(ob, "170	L	S	10	1000	N");
+    ob->cancelOrder(170);
     // clang-format off
     n.Verify({"CreateOrder Accepted 170 10", 
             "CancelOrder Canceled 170 10"});
@@ -147,8 +144,7 @@ TEST_F(LimitOrderTest, TestLimitOrder_CancelNonExistent) {
     addDepth(ob);
 
     n.Reset();
-    ob->cancelOrder(++tok, 170);
-    tok++;
+    ob->cancelOrder(170);
     n.Verify({"CancelOrder Rejected 170 0 ErrOrderNotExists"});
 }
 
@@ -156,7 +152,7 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateIOCWithNoMatches) {
     addDepth(ob);
 
     n.Reset();
-    processLine(ob, "300	L	S	1	200	0	I");
+    processLine(ob, "300	L	S	1	200	I");
     n.Verify({"CreateOrder Accepted 300 1"});
 }
 
@@ -165,7 +161,7 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateIOCWithMatches) {
     addDepth(ob);
 
     n.Reset();
-    processLine(ob, "300	L	S	1	90	0	I");
+    processLine(ob, "300	L	S	1	90	I");
     // clang-format off
     n.Verify({"CreateOrder Accepted 300 1", 
             "5 300 FilledPartial FilledComplete 1 90"});
@@ -176,8 +172,8 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateSell) {
     addDepth(ob);
 
     n.Reset();
-    processLine(ob, "340	L	S	11	40	0	N");
-    processLine(ob, "343	L	S	11	1	0	I");
+    processLine(ob, "340	L	S	11	40	N");
+    processLine(ob, "343	L	S	11	1	I");
 
     // clang-format off
     n.Verify({"CreateOrder Accepted 340 11", 
@@ -195,8 +191,8 @@ TEST_F(LimitOrderTest, TestLimitOrder_ClearSellBestPriceFirst) {
     addDepth(ob);
     n.Reset();
 
-    processLine(ob, "900	L	B	11	1	0	N");
-    processLine(ob, "901	L	S	11	1	0	N");
+    processLine(ob, "900	L	B	11	1	N");
+    processLine(ob, "901	L	S	11	1	N");
 
     ASSERT_FALSE(n.hasError());
     // clang-format off
@@ -215,11 +211,11 @@ TEST_F(LimitOrderTest, TestMarketProcess) {
     addDepth(ob);
     n.Reset();
 
-    processLine(ob, "800	M	B	3	0	0	N");
-    processLine(ob, "801	M	B	0	0	0	N");
-    processLine(ob, "802	M	S	12	0	0	N");
-    processLine(ob, "803	M	B	12	0	0	A");
-    processLine(ob, "804	M	B	12	0	0	N");
+    processLine(ob, "800	M	B	3	0	N");
+    processLine(ob, "801	M	B	0	0	N");
+    processLine(ob, "802	M	S	12	0	N");
+    processLine(ob, "803	M	B	12	0	A");
+    processLine(ob, "804	M	B	12	0	N");
 
     // clang-format off
     n.Verify({"CreateOrder Accepted 800 3",
@@ -246,7 +242,7 @@ TEST_F(LimitOrderTest, TestMarketProcess_PriceLevel_FIFO) {
     addDepth(ob, 1);
     n.Reset();
 
-    processLine(ob, "801	M	B	6	0	0	N");
+    processLine(ob, "801	M	B	6	0	N");
 
     // clang-format off
         n.Verify({"CreateOrder Accepted 801 6",
