@@ -139,6 +139,15 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateWithZeroPrice) {
     n.Verify({"CreateOrder Rejected 170 0 ErrInvalidPrice"});
 }
 
+TEST_F(LimitOrderTest, TestLimitOrder_CreateDuplicateOrderID) {
+    addDepth(ob);
+
+    n.Reset();
+    processLine(ob, "170	L	S	10	1000	N");
+    processLine(ob, "170	L	S	5	1000	N");
+    n.Verify({"CreateOrder Accepted 170 10", "CreateOrder Rejected 170 0 ErrOrderExists"});
+}
+
 TEST_F(LimitOrderTest, TestLimitOrder_CreateAndCancel) {
     addDepth(ob);
 
@@ -294,6 +303,16 @@ TEST_F(LimitOrderTest, TestNoMatchingMode_LimitOrderCrossesSpread) {
     n.Verify({"CreateOrder Rejected 901 2 ErrNoMatching"});
 }
 
+TEST_F(LimitOrderTest, TestNoMatchingMode_LimitSellOrderCrossesSpread) {
+    addDepth(ob);
+    ob->setMatching(false);
+    n.Reset();
+
+    // Sell limit that would cross the best bid (90) → rejected
+    processLine(ob, "911	L	S	2	90	N");
+    n.Verify({"CreateOrder Rejected 911 2 ErrNoMatching"});
+}
+
 TEST_F(LimitOrderTest, TestNoMatchingMode_LimitOrderNoMatch) {
     addDepth(ob);
     ob->setMatching(false);
@@ -302,6 +321,16 @@ TEST_F(LimitOrderTest, TestNoMatchingMode_LimitOrderNoMatch) {
     // Buy limit well below the best ask → accepted and resting
     processLine(ob, "902	L	B	2	50	N");
     n.Verify({"CreateOrder Accepted 902 2"});
+}
+
+TEST_F(LimitOrderTest, TestNoMatchingMode_LimitSellOrderNoMatch) {
+    addDepth(ob);
+    ob->setMatching(false);
+    n.Reset();
+
+    // Sell limit well above the best bid → accepted and resting
+    processLine(ob, "912	L	S	2	200	N");
+    n.Verify({"CreateOrder Accepted 912 2"});
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
