@@ -54,7 +54,8 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessUpdatesTotalQtyOnFullFill) {
     oq->append(&o1);
     oq->append(&o2);
 
-    const TradeNotification tn = [](OrderID makerId, OrderID takerId, OrderStatus makerStatus, OrderStatus takerStatus, Decimal qty, Decimal price) {};
+    const TradeNotification tn = [](OrderID makerOrderID, OrderID takerOrderID, OrderStatus makerOrderStatus, OrderStatus takerOrderStatus, Decimal matchedQty,
+                                    Decimal matchedPrice) {};
     const PostOrderFill pf = [&oq, &o1, &o2](OrderID id) {
         if (id == 1) {
             oq->remove(&o1);
@@ -83,7 +84,8 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessUpdatesTotalQtyOnExactFill) {
     oq->append(&o1);
     oq->append(&o2);
 
-    const TradeNotification tn = [](OrderID makerId, OrderID takerId, OrderStatus makerStatus, OrderStatus takerStatus, Decimal qty, Decimal price) {};
+    const TradeNotification tn = [](OrderID makerOrderID, OrderID takerOrderID, OrderStatus makerOrderStatus, OrderStatus takerOrderStatus, Decimal matchedQty,
+                                    Decimal matchedPrice) {};
     const PostOrderFill pf = [&oq, &o1, &o2](OrderID id) {
         if (id == 1) {
             oq->remove(&o1);
@@ -110,7 +112,8 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessZeroesFilledOrderBeforePostFill) {
     oq->append(&o2);
 
     bool sawZeroQtyOnPostFill = false;
-    const TradeNotification tn = [](OrderID makerId, OrderID takerId, OrderStatus makerStatus, OrderStatus takerStatus, Decimal qty, Decimal price) {};
+    const TradeNotification tn = [](OrderID makerOrderID, OrderID takerOrderID, OrderStatus makerOrderStatus, OrderStatus takerOrderStatus, Decimal matchedQty,
+                                    Decimal matchedPrice) {};
     const PostOrderFill pf = [&oq, &o1, &o2, &sawZeroQtyOnPostFill](OrderID id) {
         if (id == 1) {
             sawZeroQtyOnPostFill = (o1.qty == Decimal(0, 0));

@@ -49,7 +49,7 @@ Decimal OrderQueue::process(const TradeNotification& tradeNotification, const Po
             qty -= matchedQty;
             total_qty_ -= matchedQty;
             ++it;
-            ho->qty = Decimal(0, 0);
+            ho->qty = Decimal{};
             postFill(ho->id);
             // qty has already been decremented by matchedQty, so zero means taker is fully filled.
             const auto takerStatus = qty.is_zero() ? OrderStatus::FilledComplete : OrderStatus::FilledPartial;

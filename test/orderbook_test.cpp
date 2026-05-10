@@ -167,7 +167,7 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateIOCWithNoMatches) {
     n.Verify({"CreateOrder Accepted 300 1"});
 }
 
-TEST_F(LimitOrderTest, TestLimitOrder_CreateIOCWithMatches) {
+TEST_F(LimitOrderTest, TestLimitOrder_CreateIoCWithMatches) {
     addDepth(ob);
 
     n.Reset();
