@@ -21,9 +21,7 @@ The library is header-centric (`include/orderbook.hpp`) and exposes a clean, tem
 - [x] Intrusive Boost red-black trees — zero heap allocation per order in the hot path
 - [x] Adaptive object pools for `Order` and `OrderQueue` objects
 - [x] Fixed-precision decimal arithmetic via [geseq/cpp-decimal](https://github.com/geseq/cpp-decimal) (8 decimal places)
-- [ ] Stop-loss / take-profit orders
 - [ ] Order book snapshot / recovery
-- [ ] Trailing stops
 
 ## Architecture
 
