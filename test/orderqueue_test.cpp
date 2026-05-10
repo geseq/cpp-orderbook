@@ -134,4 +134,41 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessZeroesFilledOrderBeforePostFill) {
     oq->remove(&o2);
 }
 
+TEST_F(OrderQueueTest, TestOrderQueue_ProcessUsesSnapshotForTradeNotificationAfterPostFill) {
+    Decimal price(100, 0);
+    auto oq = std::make_unique<OrderQueue>(price);
+
+    auto o1 = Order(1, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
+    auto o2 = Order(2, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
+
+    oq->append(&o1);
+    oq->append(&o2);
+
+    OrderID makerOrderID = 0;
+    Decimal matchedPrice(0, 0);
+    const TradeNotification tn = [&makerOrderID, &matchedPrice](OrderID makerID, OrderID takerOrderID, OrderStatus makerOrderStatus,
+                                                                OrderStatus takerOrderStatus, Decimal matchedQty, Decimal priceValue) {
+        makerOrderID = makerID;
+        matchedPrice = priceValue;
+    };
+    const PostOrderFill pf = [&oq, &o1](OrderID id) {
+        if (id == 1) {
+            oq->remove(&o1);
+            o1.id = 999;
+            o1.price = Decimal(999, 0);
+        }
+    };
+
+    auto qtyProcessed = oq->process(tn, pf, 903, Decimal(100, 0));
+
+    EXPECT_EQ(qtyProcessed, Decimal(100, 0));
+    EXPECT_EQ(makerOrderID, 1);
+    EXPECT_EQ(matchedPrice, Decimal(100, 0));
+    EXPECT_EQ(oq->len(), 1);
+    EXPECT_EQ(oq->totalQty(), Decimal(100, 0));
+
+    // remove from container before destroying
+    oq->remove(&o2);
+}
+
 }  // namespace orderbook::test

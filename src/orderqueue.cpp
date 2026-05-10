@@ -44,6 +44,8 @@ Decimal OrderQueue::process(const TradeNotification& tradeNotification, const Po
             tradeNotification(ho->id, takerOrderID, OrderStatus::FilledPartial, OrderStatus::FilledComplete, qty, ho->price);
             break;
         } else {
+            const auto makerOrderID = ho->id;
+            const auto makerPrice = ho->price;
             auto matchedQty = ho->qty;
             qtyProcessed += matchedQty;
             qty -= matchedQty;
@@ -51,10 +53,10 @@ Decimal OrderQueue::process(const TradeNotification& tradeNotification, const Po
             ++it;
             // Zero maker quantity before postFill so callbacks/removal observe a fully filled maker order.
             ho->qty = Decimal{};
-            postFill(ho->id);
+            postFill(makerOrderID);
             // qty has already been decremented by matchedQty, so zero means taker is fully filled.
             const auto takerStatus = qty.is_zero() ? OrderStatus::FilledComplete : OrderStatus::FilledPartial;
-            tradeNotification(ho->id, takerOrderID, OrderStatus::FilledComplete, takerStatus, matchedQty, ho->price);
+            tradeNotification(makerOrderID, takerOrderID, OrderStatus::FilledComplete, takerStatus, matchedQty, makerPrice);
         }
     }
 
