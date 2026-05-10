@@ -160,6 +160,20 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateAndCancel) {
     // clang-format on
 }
 
+TEST_F(LimitOrderTest, TestLimitOrder_PartialFillThenCancel) {
+    addDepth(ob);
+
+    n.Reset();
+    // Buy qty=5 at price=100: fills 2 from best ask (100), leaves 3 resting.
+    processLine(ob, "180	L	B	5	100	N");
+    ob->cancelOrder(180);
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 180 5 5",
+              "6 180 FilledComplete FilledPartial 2 100",
+              "CancelOrder Canceled 180 3 5"});
+    // clang-format on
+}
+
 TEST_F(LimitOrderTest, TestLimitOrder_CancelNonExistent) {
     addDepth(ob);
 

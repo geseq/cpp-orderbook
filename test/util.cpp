@@ -31,8 +31,8 @@ struct OrderNotification : public NotificationBase {
     orderbook::Decimal original_qty_;
     std::optional<orderbook::Error> error_;
 
-    OrderNotification(orderbook::MsgType msg_type, orderbook::OrderStatus status, orderbook::OrderID order_id, orderbook::Decimal& qty,
-                      orderbook::Decimal& original_qty, std::optional<orderbook::Error> error)
+    OrderNotification(orderbook::MsgType msg_type, orderbook::OrderStatus status, orderbook::OrderID order_id, const orderbook::Decimal& qty,
+                      const orderbook::Decimal& original_qty, std::optional<orderbook::Error> error)
         : msg_type_(msg_type), status_(status), order_id_(order_id), qty_(qty), original_qty_(original_qty), error_(error){};
 
     [[nodiscard]] std::string to_string() const override {
