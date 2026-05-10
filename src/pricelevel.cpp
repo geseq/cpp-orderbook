@@ -75,9 +75,10 @@ template <PriceType P>
 template <PriceType Q>
 Decimal PriceLevel<P>::processMarketOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal qty, Flag flag) {
     static_assert(Q == PriceType::Bid || Q == PriceType::Ask, "Unsupported PriceType");
-    // TODO: this won't work as pricelevel volumes aren't accounted for correctly
+
     if ((flag & (AoN | FoK)) != 0 && qty > volume_) {
-        return uint64_t(0);
+        // AoN/FoK must match the full requested quantity; return zero processed when aggregate volume is insufficient.
+        return Decimal{};
     }
 
     auto qtyLeft = qty;
@@ -86,9 +87,10 @@ Decimal PriceLevel<P>::processMarketOrder(const TradeNotification& tn, const Pos
         auto pq = q->process(tn, pf, takerOrderID, qtyLeft);
         qtyLeft -= pq;
         qtyProcessed += pq;
+        volume_ -= pq;
     }
 
-    return uint64_t(0);
+    return qtyProcessed;
 };
 
 template <PriceType P>
@@ -112,7 +114,8 @@ Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const Post
         }
     }
 
-    // TODO: Fix AoN
+    // AoN/FoK pre-check: only continue when aggregate fillable volume exists at eligible price levels.
+    // Matched quantity is accounted for incrementally via volume_ -= result in the execution loop below.
     if (flag & (AoN | FoK)) {
         if (qty > volume()) {
             return Decimal{};
@@ -121,22 +124,22 @@ Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const Post
         bool canFill = false;
         auto aQty = qty;
         if constexpr (std::is_same_v<CompareType, CmpGreater>) {
-            while (orderQueue != nullptr && price < orderQueue->price()) {
-                if (aQty <= orderQueue->totalQty()) {
+            // Bid tree is descending (best = highest). Accumulate from bids >= sell limit.
+            for (auto it = price_tree_.begin(); it != price_tree_.end() && it->price() >= price; ++it) {
+                if (aQty <= it->totalQty()) {
                     canFill = true;
                     break;
                 }
-                aQty -= orderQueue->totalQty();
-                orderQueue = getNextQueue(orderQueue->price());
+                aQty -= it->totalQty();
             }
         } else {
-            while (orderQueue != nullptr && price > orderQueue->price()) {
-                if (aQty <= orderQueue->totalQty()) {
+            // Ask tree is ascending (best = lowest). Accumulate from asks <= buy limit.
+            for (auto it = price_tree_.begin(); it != price_tree_.end() && it->price() <= price; ++it) {
+                if (aQty <= it->totalQty()) {
                     canFill = true;
                     break;
                 }
-                aQty -= orderQueue->totalQty();
-                orderQueue = getNextQueue(orderQueue->price());
+                aQty -= it->totalQty();
             }
         }
 
@@ -149,9 +152,16 @@ Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const Post
     Decimal qtyLeft = qty;
 
     for (orderQueue = getQueue(); !qtyLeft.is_zero() && orderQueue != nullptr; orderQueue = getQueue()) {
+        // Stop as soon as the best remaining queue price no longer satisfies the limit.
+        if constexpr (std::is_same_v<CompareType, CmpGreater>) {
+            if (orderQueue->price() < price) break;  // bid price fell below sell limit
+        } else {
+            if (orderQueue->price() > price) break;  // ask price rose above buy limit
+        }
         Decimal result = orderQueue->process(tn, pf, takerOrderID, qtyLeft);
         qtyLeft -= result;
         qtyProcessed += result;
+        volume_ -= result;
     }
 
     return qtyProcessed;
