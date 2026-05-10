@@ -45,33 +45,33 @@ class OrderBook {
 
     bool matching_ = true;
 
-    Decimal eraseOrder(OrderID id);
+    std::pair<Decimal, Decimal> eraseOrder(OrderID id);
     void processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
 };
 
 template <class Notification>
 void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
     if (qty.is_zero()) [[unlikely]] {
-        notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::InvalidQty);
+        notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, qty, Error::InvalidQty);
         return;
     }
 
     if (!matching_) [[unlikely]] {
         if (type == Type::Market) {
-            notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::NoMatching);
+            notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, qty, Error::NoMatching);
             return;
         }
 
         if (side == Side::Buy) {
             auto q = asks_.getQueue();
             if (q != nullptr && q->price() <= price) {
-                notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::NoMatching);
+                notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, qty, Error::NoMatching);
                 return;
             }
         } else {
             auto q = bids_.getQueue();
             if (q != nullptr && q->price() >= price) {
-                notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::NoMatching);
+                notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, qty, Error::NoMatching);
                 return;
             }
         }
@@ -79,17 +79,17 @@ void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal
 
     if (type != Type::Market) {
         if (orders_.find(id, orderbook::OrderIDCompare()) != orders_.end()) {
-            notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, uint64_t(0), Error::OrderExists);
+            notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, uint64_t(0), qty, Error::OrderExists);
             return;
         }
 
         if (price.is_zero()) {
-            notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, uint64_t(0), Error::InvalidPrice);
+            notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, uint64_t(0), qty, Error::InvalidPrice);
             return;
         }
     }
 
-    notification_.putOrder(MsgType::CreateOrder, OrderStatus::Accepted, id, qty);
+    notification_.putOrder(MsgType::CreateOrder, OrderStatus::Accepted, id, qty, qty);
     processOrder(id, type, side, qty, price, flag);
 }
 
@@ -146,20 +146,20 @@ void OrderBook<Notification>::putTradeNotification(OrderID mOrderID, OrderID tOr
 
 template <class Notification>
 void OrderBook<Notification>::cancelOrder(OrderID id) {
-    auto qty = eraseOrder(id);
+    auto [qty, original_qty] = eraseOrder(id);
     if (qty.is_zero()) {
-        notification_.putOrder(MsgType::CancelOrder, OrderStatus::Rejected, id, uint64_t(0), Error::OrderNotExists);
+        notification_.putOrder(MsgType::CancelOrder, OrderStatus::Rejected, id, uint64_t(0), uint64_t(0), Error::OrderNotExists);
         return;
     }
 
-    notification_.putOrder(MsgType::CancelOrder, OrderStatus::Canceled, id, qty);
+    notification_.putOrder(MsgType::CancelOrder, OrderStatus::Canceled, id, qty, original_qty);
 }
 
 template <class Notification>
-Decimal OrderBook<Notification>::eraseOrder(OrderID id) {
+std::pair<Decimal, Decimal> OrderBook<Notification>::eraseOrder(OrderID id) {
     auto it = orders_.find(id, OrderIDCompare());
     if (it == orders_.end()) {
-        return uint64_t(0);
+        return {uint64_t(0), uint64_t(0)};
     }
 
     auto& pool = order_pool_;
@@ -169,11 +169,11 @@ Decimal OrderBook<Notification>::eraseOrder(OrderID id) {
 
     if (order->side == Side::Buy) {
         bids_.remove(order);
-        return order->qty;
+        return {order->qty, order->original_qty};
     }
 
     asks_.remove(order);
-    return order->qty;
+    return {order->qty, order->original_qty};
 }
 
 template <class Notification>

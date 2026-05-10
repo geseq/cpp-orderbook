@@ -84,11 +84,11 @@ struct Trade {
 template <typename Implementation>
 class NotificationInterface {
    public:
-    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty, Error err) {
-        static_cast<Implementation*>(this)->putOrder(msgtype, status, id, qty, err);
+    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty, Decimal original_qty, Error err) {
+        static_cast<Implementation*>(this)->putOrder(msgtype, status, id, qty, original_qty, err);
     }
 
-    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty) { static_cast<Implementation*>(this)->putOrder(msgtype, status, id, qty); }
+    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty, Decimal original_qty) { static_cast<Implementation*>(this)->putOrder(msgtype, status, id, qty, original_qty); }
 
     void putTrade(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {
         static_cast<Implementation*>(this)->putTrade(mOrderID, tOrderID, mStatus, tStatus, qty, price);
@@ -97,9 +97,9 @@ class NotificationInterface {
 
 class EmptyNotification : public NotificationInterface<EmptyNotification> {
    public:
-    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty, Error err) {}
+    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty, Decimal original_qty, Error err) {}
 
-    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty) {}
+    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty, Decimal original_qty) {}
 
     void putTrade(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {}
 };
