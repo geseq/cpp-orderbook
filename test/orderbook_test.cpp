@@ -252,6 +252,36 @@ TEST_F(LimitOrderTest, TestMarketProcess_PriceLevel_FIFO) {
     // clang-format on
 }
 
+TEST_F(LimitOrderTest, TestNoMatchingMode_MarketOrderRejected) {
+    addDepth(ob);
+    ob->setMatching(false);
+    n.Reset();
+
+    // Market orders are always rejected in no-matching mode
+    processLine(ob, "900	M	B	3	0	N");
+    n.Verify({"CreateOrder Rejected 900 3 ErrNoMatching"});
+}
+
+TEST_F(LimitOrderTest, TestNoMatchingMode_LimitOrderCrossesSpread) {
+    addDepth(ob);
+    ob->setMatching(false);
+    n.Reset();
+
+    // Buy limit that would cross the best ask (100) → rejected
+    processLine(ob, "901	L	B	2	100	N");
+    n.Verify({"CreateOrder Rejected 901 2 ErrNoMatching"});
+}
+
+TEST_F(LimitOrderTest, TestNoMatchingMode_LimitOrderNoMatch) {
+    addDepth(ob);
+    ob->setMatching(false);
+    n.Reset();
+
+    // Buy limit well below the best ask → accepted and resting
+    processLine(ob, "902	L	B	2	50	N");
+    n.Verify({"CreateOrder Accepted 902 2"});
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

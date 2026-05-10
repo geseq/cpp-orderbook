@@ -27,6 +27,7 @@ class OrderBook {
     void putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price);
     void cancelOrder(OrderID id);
     bool hasOrder(OrderID id);
+    void setMatching(bool matching) { matching_ = matching; }
 
     std::string toString();
 
@@ -42,6 +43,8 @@ class OrderBook {
 
     Notification& notification_;
 
+    bool matching_ = true;
+
     Decimal eraseOrder(OrderID id);
     void processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
 };
@@ -51,6 +54,27 @@ void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal
     if (qty.is_zero()) [[unlikely]] {
         notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::InvalidQty);
         return;
+    }
+
+    if (!matching_) [[unlikely]] {
+        if (type == Type::Market) {
+            notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::NoMatching);
+            return;
+        }
+
+        if (side == Side::Buy) {
+            auto q = asks_.getQueue();
+            if (q != nullptr && q->price() <= price) {
+                notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::NoMatching);
+                return;
+            }
+        } else {
+            auto q = bids_.getQueue();
+            if (q != nullptr && q->price() >= price) {
+                notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::NoMatching);
+                return;
+            }
+        }
     }
 
     if (type != Type::Market) {
