@@ -157,7 +157,6 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateIOCWithNoMatches) {
 }
 
 TEST_F(LimitOrderTest, TestLimitOrder_CreateIOCWithMatches) {
-    return;  // TODO
     addDepth(ob);
 
     n.Reset();
@@ -280,6 +279,411 @@ TEST_F(LimitOrderTest, TestNoMatchingMode_LimitOrderNoMatch) {
     // Buy limit well below the best ask → accepted and resting
     processLine(ob, "902	L	B	2	50	N");
     n.Verify({"CreateOrder Accepted 902 2"});
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// IoC – Immediate or Cancel
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Limit sell IoC: best bid exactly matches the limit price → one trade, rest cancelled (no book entry).
+TEST_F(LimitOrderTest, TestIoC_LimitSell_ExactMatch) {
+    addDepth(ob);
+    n.Reset();
+
+    // Sell IoC at 90 for qty 1 – best bid is 90 (qty 2), so a partial maker fill.
+    processLine(ob, "300	L	S	1	90	I");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 300 1",
+              "5 300 FilledPartial FilledComplete 1 90"});
+    // clang-format on
+
+    // The IoC order must NOT be resting in the book.
+    ASSERT_FALSE(ob->hasOrder(300));
+}
+
+// Limit buy IoC: best ask exactly matches the limit price → trade, no book entry.
+TEST_F(LimitOrderTest, TestIoC_LimitBuy_ExactMatch) {
+    addDepth(ob);
+    n.Reset();
+
+    // Buy IoC at 100 for qty 1 – best ask is 100 (qty 2).
+    processLine(ob, "400	L	B	1	100	I");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 400 1",
+              "6 400 FilledPartial FilledComplete 1 100"});
+    // clang-format on
+    ASSERT_FALSE(ob->hasOrder(400));
+}
+
+// Limit sell IoC: spans multiple bid price levels, unfilled qty is cancelled immediately.
+TEST_F(LimitOrderTest, TestIoC_LimitSell_MultiLevel_PartialFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Sell IoC at 70, qty 11 – bids at 90(2), 80(2), 70(2) = 6 available at or above 70.
+    // Three levels fill; 5 units remain but are cancelled (IoC).
+    processLine(ob, "301	L	S	11	70	I");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 301 11",
+              "5 301 FilledComplete FilledPartial 2 90",
+              "4 301 FilledComplete FilledPartial 2 80",
+              "3 301 FilledComplete FilledPartial 2 70"});
+    // clang-format on
+    ASSERT_FALSE(ob->hasOrder(301));
+}
+
+// Limit sell IoC: no matching bid price – no trades, order is silently cancelled.
+TEST_F(LimitOrderTest, TestIoC_LimitSell_NoMatch) {
+    addDepth(ob);
+    n.Reset();
+
+    // Sell IoC at 200 – all bids are below 200.
+    processLine(ob, "302	L	S	1	200	I");
+    n.Verify({"CreateOrder Accepted 302 1"});
+    ASSERT_FALSE(ob->hasOrder(302));
+}
+
+// Limit buy IoC: no matching ask – no trades, order silently cancelled.
+TEST_F(LimitOrderTest, TestIoC_LimitBuy_NoMatch) {
+    addDepth(ob);
+    n.Reset();
+
+    // Buy IoC at 50 – best ask is 100, which is above 50 → no match.
+    processLine(ob, "403	L	B	1	50	I");
+    n.Verify({"CreateOrder Accepted 403 1"});
+    ASSERT_FALSE(ob->hasOrder(403));
+}
+
+// Limit buy IoC: spans multiple ask levels, remaining qty cancelled.
+TEST_F(LimitOrderTest, TestIoC_LimitBuy_MultiLevel_PartialFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Buy IoC at 120, qty 11 – asks at 100(2), 110(2), 120(2) = 6 fillable.
+    processLine(ob, "404	L	B	11	120	I");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 404 11",
+              "6 404 FilledComplete FilledPartial 2 100",
+              "7 404 FilledComplete FilledPartial 2 110",
+              "8 404 FilledComplete FilledPartial 2 120"});
+    // clang-format on
+    ASSERT_FALSE(ob->hasOrder(404));
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// AoN – All or Nothing (limit orders)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Limit sell AoN: enough liquidity at the limit price → fully executes.
+TEST_F(LimitOrderTest, TestAoN_LimitSell_CanFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Sell AoN at 90 for qty 2 – bid at 90 has exactly qty 2.
+    processLine(ob, "500	L	S	2	90	A");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 500 2",
+              "5 500 FilledComplete FilledComplete 2 90"});
+    // clang-format on
+    ASSERT_FALSE(ob->hasOrder(500));
+}
+
+// Limit sell AoN: insufficient liquidity at or above the limit → no trades, order rests.
+TEST_F(LimitOrderTest, TestAoN_LimitSell_CannotFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Sell AoN at 90 for qty 3 – bid at 90 only has qty 2, no other bid >= 90.
+    processLine(ob, "501	L	S	3	90	A");
+    n.Verify({"CreateOrder Accepted 501 3"});
+    // AoN that can't fill immediately rests in the book.
+    ASSERT_TRUE(ob->hasOrder(501));
+}
+
+// Limit buy AoN: enough liquidity at the limit price → fully executes.
+TEST_F(LimitOrderTest, TestAoN_LimitBuy_CanFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Buy AoN at 100 for qty 2 – ask at 100 has exactly qty 2.
+    processLine(ob, "510	L	B	2	100	A");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 510 2",
+              "6 510 FilledComplete FilledComplete 2 100"});
+    // clang-format on
+    ASSERT_FALSE(ob->hasOrder(510));
+}
+
+// Limit buy AoN: insufficient liquidity at or below the limit → no trades, order rests.
+TEST_F(LimitOrderTest, TestAoN_LimitBuy_CannotFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Buy AoN at 100 for qty 3 – ask at 100 has only qty 2, no other ask <= 100.
+    processLine(ob, "511	L	B	3	100	A");
+    n.Verify({"CreateOrder Accepted 511 3"});
+    ASSERT_TRUE(ob->hasOrder(511));
+}
+
+// Limit sell AoN spanning multiple bid price levels → fully executes.
+TEST_F(LimitOrderTest, TestAoN_LimitSell_MultiLevel_CanFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Sell AoN at 80 for qty 4 – bids: 90(2) + 80(2) = 4 → enough.
+    processLine(ob, "502	L	S	4	80	A");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 502 4",
+              "5 502 FilledComplete FilledPartial 2 90",
+              "4 502 FilledComplete FilledComplete 2 80"});
+    // clang-format on
+    ASSERT_FALSE(ob->hasOrder(502));
+}
+
+// Limit sell AoN spanning multiple bid levels but one level short → no trades, order rests.
+TEST_F(LimitOrderTest, TestAoN_LimitSell_MultiLevel_CannotFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Sell AoN at 90 for qty 3 – only 2 at bid 90 (no other bid >= 90) → cannot fill.
+    processLine(ob, "503	L	S	3	90	A");
+    n.Verify({"CreateOrder Accepted 503 3"});
+    ASSERT_TRUE(ob->hasOrder(503));
+}
+
+// Limit buy AoN spanning multiple ask price levels → fully executes.
+TEST_F(LimitOrderTest, TestAoN_LimitBuy_MultiLevel_CanFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Buy AoN at 110 for qty 4 – asks: 100(2) + 110(2) = 4 → enough.
+    processLine(ob, "512	L	B	4	110	A");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 512 4",
+              "6 512 FilledComplete FilledPartial 2 100",
+              "7 512 FilledComplete FilledComplete 2 110"});
+    // clang-format on
+    ASSERT_FALSE(ob->hasOrder(512));
+}
+
+// Limit buy AoN: limit price falls between two ask levels, not enough fillable volume.
+TEST_F(LimitOrderTest, TestAoN_LimitBuy_MultiLevel_CannotFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Buy AoN at 100 for qty 3 – only 2 available at or below 100 → cannot fill.
+    processLine(ob, "513	L	B	3	100	A");
+    n.Verify({"CreateOrder Accepted 513 3"});
+    ASSERT_TRUE(ob->hasOrder(513));
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// AoN – market orders
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Market sell AoN: enough bids in the book → fully executes.
+TEST_F(LimitOrderTest, TestAoN_MarketSell_CanFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // 10 bids in the book (5 levels × qty 2). Market sell AoN for qty 6 → can fill.
+    processLine(ob, "600	M	S	6	0	A");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 600 6",
+              "5 600 FilledComplete FilledPartial 2 90",
+              "4 600 FilledComplete FilledPartial 2 80",
+              "3 600 FilledComplete FilledComplete 2 70"});
+    // clang-format on
+}
+
+// Market sell AoN: not enough bids → no execution.
+TEST_F(LimitOrderTest, TestAoN_MarketSell_CannotFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Total bid volume = 10; requesting 11 → cannot fill.
+    processLine(ob, "601	M	S	11	0	A");
+    n.Verify({"CreateOrder Accepted 601 11"});
+}
+
+// Market buy AoN: enough asks → fully executes.
+TEST_F(LimitOrderTest, TestAoN_MarketBuy_CanFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // 10 asks in the book. Market buy AoN for qty 4 → fills 100(2) + 110(2).
+    processLine(ob, "610	M	B	4	0	A");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 610 4",
+              "6 610 FilledComplete FilledPartial 2 100",
+              "7 610 FilledComplete FilledComplete 2 110"});
+    // clang-format on
+}
+
+// Market buy AoN: more than total ask volume → no execution.
+TEST_F(LimitOrderTest, TestAoN_MarketBuy_CannotFill) {
+    addDepth(ob);
+    n.Reset();
+
+    processLine(ob, "611	M	B	11	0	A");
+    n.Verify({"CreateOrder Accepted 611 11"});
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// FoK – Fill or Kill (AoN + IoC: must fill entirely, never rests)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Limit sell FoK: enough bid liquidity at limit price → fills completely, no book entry.
+TEST_F(LimitOrderTest, TestFoK_LimitSell_CanFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Sell FoK at 90 for qty 2 – bid at 90 has qty 2.
+    processLine(ob, "700	L	S	2	90	F");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 700 2",
+              "5 700 FilledComplete FilledComplete 2 90"});
+    // clang-format on
+    ASSERT_FALSE(ob->hasOrder(700));
+}
+
+// Limit sell FoK: not enough liquidity → no trades AND order is killed (not in book).
+TEST_F(LimitOrderTest, TestFoK_LimitSell_CannotFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Sell FoK at 90 for qty 3 – only 2 available at >= 90 → kill.
+    processLine(ob, "701	L	S	3	90	F");
+    n.Verify({"CreateOrder Accepted 701 3"});
+    // FoK must NOT rest in the book.
+    ASSERT_FALSE(ob->hasOrder(701));
+}
+
+// Limit buy FoK: enough ask liquidity at limit price → fills completely, no book entry.
+TEST_F(LimitOrderTest, TestFoK_LimitBuy_CanFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Buy FoK at 100 for qty 2 – ask at 100 has qty 2.
+    processLine(ob, "710	L	B	2	100	F");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 710 2",
+              "6 710 FilledComplete FilledComplete 2 100"});
+    // clang-format on
+    ASSERT_FALSE(ob->hasOrder(710));
+}
+
+// Limit buy FoK: not enough liquidity → no trades AND order is killed.
+TEST_F(LimitOrderTest, TestFoK_LimitBuy_CannotFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Buy FoK at 100 for qty 3 – only 2 available at <= 100 → kill.
+    processLine(ob, "711	L	B	3	100	F");
+    n.Verify({"CreateOrder Accepted 711 3"});
+    ASSERT_FALSE(ob->hasOrder(711));
+}
+
+// Limit sell FoK spanning multiple bid price levels → fills all, no book entry.
+TEST_F(LimitOrderTest, TestFoK_LimitSell_MultiLevel_CanFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Sell FoK at 70 for qty 6 – bids: 90(2) + 80(2) + 70(2) = 6.
+    processLine(ob, "702	L	S	6	70	F");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 702 6",
+              "5 702 FilledComplete FilledPartial 2 90",
+              "4 702 FilledComplete FilledPartial 2 80",
+              "3 702 FilledComplete FilledComplete 2 70"});
+    // clang-format on
+    ASSERT_FALSE(ob->hasOrder(702));
+}
+
+// Limit sell FoK spanning multiple bid levels but one short → no trades, order killed.
+TEST_F(LimitOrderTest, TestFoK_LimitSell_MultiLevel_CannotFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Sell FoK at 70 for qty 7 – max available at >= 70 is 6 → kill.
+    processLine(ob, "703	L	S	7	70	F");
+    n.Verify({"CreateOrder Accepted 703 7"});
+    ASSERT_FALSE(ob->hasOrder(703));
+}
+
+// Limit buy FoK spanning multiple ask price levels → fills all, no book entry.
+TEST_F(LimitOrderTest, TestFoK_LimitBuy_MultiLevel_CanFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Buy FoK at 120 for qty 6 – asks: 100(2) + 110(2) + 120(2) = 6.
+    processLine(ob, "712	L	B	6	120	F");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 712 6",
+              "6 712 FilledComplete FilledPartial 2 100",
+              "7 712 FilledComplete FilledPartial 2 110",
+              "8 712 FilledComplete FilledComplete 2 120"});
+    // clang-format on
+    ASSERT_FALSE(ob->hasOrder(712));
+}
+
+// Limit buy FoK spanning multiple ask levels but one short → no trades, order killed.
+TEST_F(LimitOrderTest, TestFoK_LimitBuy_MultiLevel_CannotFill) {
+    addDepth(ob);
+    n.Reset();
+
+    // Buy FoK at 120 for qty 7 – max available at <= 120 is 6 → kill.
+    processLine(ob, "713	L	B	7	120	F");
+    n.Verify({"CreateOrder Accepted 713 7"});
+    ASSERT_FALSE(ob->hasOrder(713));
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// FoK – market orders
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Market sell FoK: enough bids → fully executes, order is never in the book.
+TEST_F(LimitOrderTest, TestFoK_MarketSell_CanFill) {
+    addDepth(ob);
+    n.Reset();
+
+    processLine(ob, "800	M	S	4	0	F");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 800 4",
+              "5 800 FilledComplete FilledPartial 2 90",
+              "4 800 FilledComplete FilledComplete 2 80"});
+    // clang-format on
+}
+
+// Market sell FoK: total bid volume insufficient → no trades.
+TEST_F(LimitOrderTest, TestFoK_MarketSell_CannotFill) {
+    addDepth(ob);
+    n.Reset();
+
+    processLine(ob, "801	M	S	11	0	F");
+    n.Verify({"CreateOrder Accepted 801 11"});
+}
+
+// Market buy FoK: enough asks → fully executes.
+TEST_F(LimitOrderTest, TestFoK_MarketBuy_CanFill) {
+    addDepth(ob);
+    n.Reset();
+
+    processLine(ob, "810	M	B	4	0	F");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 810 4",
+              "6 810 FilledComplete FilledPartial 2 100",
+              "7 810 FilledComplete FilledComplete 2 110"});
+    // clang-format on
+}
+
+// Market buy FoK: total ask volume insufficient → no trades.
+TEST_F(LimitOrderTest, TestFoK_MarketBuy_CannotFill) {
+    addDepth(ob);
+    n.Reset();
+
+    processLine(ob, "811	M	B	11	0	F");
+    n.Verify({"CreateOrder Accepted 811 11"});
 }
 
 int main(int argc, char** argv) {
