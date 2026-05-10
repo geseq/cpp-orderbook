@@ -6,7 +6,7 @@ A high-performance, low-latency C++20 order book for matching engines.
 
 ## Overview
 
-`cpp-orderbook` is the C++ counterpart of [geseq/orderbook](https://github.com/geseq/orderbook) (the Go version). It implements a price-time priority order book suitable for use as the core matching component of an exchange or trading simulator.
+`cpp-orderbook` implements a price-time priority order book suitable for use as the core matching component of an exchange or trading simulator.
 
 The library is header-centric (`include/orderbook.hpp`) and exposes a clean, templated API. Callers supply a *notification handler* that receives order lifecycle and trade events; the book itself stays allocation-light thanks to intrusive Boost data structures and an adaptive object pool.
 
