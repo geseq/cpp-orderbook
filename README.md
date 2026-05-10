@@ -56,7 +56,7 @@ Dependencies fetched automatically:
 |---|---|---|
 | [Boost](https://www.boost.org/) | 1.80.0 | Intrusive containers (`rbtree`, `list`) |
 | [geseq/cpp-decimal](https://github.com/geseq/cpp-decimal) | 2.1.0 | Fixed-precision decimal arithmetic |
-| [geseq/cpp-pool](https://github.com/geseq/cpp-pool) | 0.5.0 | Adaptive object pool |
+| [geseq/cpp-pool](https://github.com/geseq/cpp-pool) | 0.6.1 | Adaptive object pool |
 | [GoogleTest](https://github.com/google/googletest) | 1.14.0 | Unit tests (test builds only) |
 
 ## Building
