@@ -77,6 +77,7 @@ Decimal PriceLevel<P>::processMarketOrder(const TradeNotification& tn, const Pos
     static_assert(Q == PriceType::Bid || Q == PriceType::Ask, "Unsupported PriceType");
 
     if ((flag & (AoN | FoK)) != 0 && qty > volume_) {
+        // AoN/FoK must match the full requested quantity; return zero processed when aggregate volume is insufficient.
         return Decimal{};
     }
 

@@ -49,6 +49,7 @@ Decimal OrderQueue::process(const TradeNotification& tradeNotification, const Po
             qty -= matchedQty;
             total_qty_ -= matchedQty;
             ++it;
+            // Zero maker quantity before postFill so callbacks/removal observe a fully filled maker order.
             ho->qty = Decimal{};
             postFill(ho->id);
             // qty has already been decremented by matchedQty, so zero means taker is fully filled.
