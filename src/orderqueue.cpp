@@ -47,6 +47,7 @@ Decimal OrderQueue::process(const TradeNotification& tradeNotification, const Po
             auto matchedQty = ho->qty;
             qtyProcessed += matchedQty;
             qty -= matchedQty;
+            total_qty_ -= matchedQty;
             ++it;
             ho->qty = uint64_t(0);
             postFill(ho->id);
@@ -55,6 +56,7 @@ Decimal OrderQueue::process(const TradeNotification& tradeNotification, const Po
             auto matchedQty = ho->qty;
             qtyProcessed += matchedQty;
             qty -= matchedQty;
+            total_qty_ -= matchedQty;
             ++it;
             ho->qty = uint64_t(0);
             postFill(ho->id);
