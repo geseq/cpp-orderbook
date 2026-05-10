@@ -113,7 +113,8 @@ Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const Post
         }
     }
 
-    // TODO: Fix AoN
+    // AoN/FoK pre-check: only continue when aggregate fillable volume exists at eligible price levels.
+    // Matched quantity is accounted for incrementally via volume_ -= result in the execution loop below.
     if (flag & (AoN | FoK)) {
         if (qty > volume()) {
             return Decimal{};

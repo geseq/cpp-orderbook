@@ -43,15 +43,6 @@ Decimal OrderQueue::process(const TradeNotification& tradeNotification, const Po
             total_qty_ -= qty;
             tradeNotification(ho->id, takerOrderID, OrderStatus::FilledPartial, OrderStatus::FilledComplete, qty, ho->price);
             break;
-        } else if (qty > ho->qty) {
-            auto matchedQty = ho->qty;
-            qtyProcessed += matchedQty;
-            qty -= matchedQty;
-            total_qty_ -= matchedQty;
-            ++it;
-            ho->qty = uint64_t(0);
-            postFill(ho->id);
-            tradeNotification(ho->id, takerOrderID, OrderStatus::FilledComplete, OrderStatus::FilledPartial, matchedQty, ho->price);
         } else {
             auto matchedQty = ho->qty;
             qtyProcessed += matchedQty;
@@ -60,7 +51,8 @@ Decimal OrderQueue::process(const TradeNotification& tradeNotification, const Po
             ++it;
             ho->qty = uint64_t(0);
             postFill(ho->id);
-            tradeNotification(ho->id, takerOrderID, OrderStatus::FilledComplete, OrderStatus::FilledComplete, matchedQty, ho->price);
+            const auto takerStatus = qty.is_zero() ? OrderStatus::FilledComplete : OrderStatus::FilledPartial;
+            tradeNotification(ho->id, takerOrderID, OrderStatus::FilledComplete, takerStatus, matchedQty, ho->price);
         }
     }
 
