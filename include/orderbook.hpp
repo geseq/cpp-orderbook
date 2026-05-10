@@ -1,6 +1,5 @@
 #pragma once
 
-#include <atomic>
 #include <cstdint>
 #include <map>
 #include <sstream>
@@ -22,15 +21,13 @@ class OrderBook {
           notification_(static_cast<Notification&>(n)),
           bids_(PriceLevel<PriceType::Bid>(price_level_pool_size)),
           asks_(PriceLevel<PriceType::Ask>(price_level_pool_size)),
-          trigger_over_(PriceLevel<PriceType::TriggerOver>(price_level_pool_size)),
-          trigger_under_(PriceLevel<PriceType::TriggerUnder>(price_level_pool_size)),
-          orders_(OrderMap()),
-          trig_orders_(OrderMap()){};
+          orders_(OrderMap()){};
 
-    void addOrder(uint64_t tok, OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag);
+    void addOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
     void putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price);
-    void cancelOrder(uint64_t tok, OrderID id);
+    void cancelOrder(OrderID id);
     bool hasOrder(OrderID id);
+    void setMatching(bool matching) { matching_ = matching; }
 
     std::string toString();
 
@@ -41,41 +38,28 @@ class OrderBook {
 
     PriceLevel<PriceType::Bid> bids_;
     PriceLevel<PriceType::Ask> asks_;
-    PriceLevel<PriceType::TriggerOver> trigger_over_;
-    PriceLevel<PriceType::TriggerUnder> trigger_under_;
 
     OrderMap orders_;
-    OrderMap trig_orders_;
 
     Notification& notification_;
 
-    std::atomic<uint64_t> last_token_ = 0;
+    bool matching_ = true;
 
-    std::atomic<uint64_t> matching_ = 1;
-
-    Decimal cancelOrder(OrderID id);
-    void addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag);
+    Decimal eraseOrder(OrderID id);
     void processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
-    void postProcess(Decimal& lp);
-    void queueTriggeredOrders();
-    void processTriggeredOrders();
 };
 
 template <class Notification>
-void OrderBook<Notification>::addOrder(uint64_t tok, OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag) {
-    uint64_t exp = tok - 1;  // technically this should always be single threaded, but just in case.
-    if (!last_token_.compare_exchange_strong(exp, tok, std::memory_order_acq_rel, std::memory_order_acquire)) [[unlikely]] {
-        throw std::invalid_argument("invalid token received: cannot maintain determinism");
-    }
-
+void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
     if (qty.is_zero()) [[unlikely]] {
         notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::InvalidQty);
         return;
     }
 
-    if (!matching_.load(std::memory_order_acquire)) [[unlikely]] {
+    if (!matching_) [[unlikely]] {
         if (type == Type::Market) {
             notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::NoMatching);
+            return;
         }
 
         if (side == Side::Buy) {
@@ -91,16 +75,6 @@ void OrderBook<Notification>::addOrder(uint64_t tok, OrderID id, Type type, Side
                 return;
             }
         }
-    }
-
-    if ((flag & (Flag::StopLoss | Flag::TakeProfit)) != 0) [[unlikely]] {
-        if (trigPrice.is_zero()) {
-            notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, Error::InvalidTriggerPrice);
-            return;
-        }
-        notification_.putOrder(MsgType::CreateOrder, OrderStatus::Accepted, id, qty);
-        addTrigOrder(id, type, side, qty, price, trigPrice, flag);
-        return;
     }
 
     if (type != Type::Market) {
@@ -120,95 +94,13 @@ void OrderBook<Notification>::addOrder(uint64_t tok, OrderID id, Type type, Side
 }
 
 template <class Notification>
-void OrderBook<Notification>::addTrigOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trigPrice, Flag flag) {
-    // TODO
-    return;
-
-    switch (flag) {
-        case Flag::StopLoss:
-            switch (side) {
-                case Side::Buy:
-                    if (trigPrice <= last_price) {
-                        processOrder(id, type, side, qty, price, flag);
-                        return;
-                    }
-                    {
-                        auto* o = order_pool_.acquire(id, type, side, qty, price, trigPrice, flag);
-                        trigger_over_.append(o);
-                        trig_orders_.insert_equal(*o);
-                    }
-                    break;
-                case Side::Sell:
-                    if (last_price <= trigPrice) {
-                        processOrder(id, type, side, qty, price, flag);
-                        return;
-                    }
-                    {
-                        auto* o = order_pool_.acquire(id, type, side, qty, price, trigPrice, flag);
-                        trigger_under_.append(o);
-                        trig_orders_.insert_equal(*o);
-                    }
-                    break;
-            }
-            break;
-        case Flag::TakeProfit:
-            switch (side) {
-                case Side::Buy:
-                    if (last_price <= trigPrice) {
-                        processOrder(id, type, side, qty, price, flag);
-                        return;
-                    }
-                    {
-                        auto* o = order_pool_.acquire(id, type, side, qty, price, trigPrice, flag);
-                        trigger_under_.append(o);
-                        trig_orders_.insert_equal(*o);
-                    }
-                    break;
-                case Side::Sell:
-                    if (trigPrice <= last_price) {
-                        processOrder(id, type, side, qty, price, flag);
-                        return;
-                    }
-                    {
-                        auto* o = order_pool_.acquire(id, type, side, qty, price, trigPrice, flag);
-                        trigger_over_.append(o);
-                        trig_orders_.insert_equal(*o);
-                    }
-                    break;
-            }
-            break;
-        default:
-            break;
-    }
-}
-
-template <class Notification>
-void OrderBook<Notification>::postProcess(Decimal& lp) {
-    if (lp == last_price) {
-        return;
-    }
-
-    queueTriggeredOrders();
-    processTriggeredOrders();
-}
-
-template <class Notification>
-void OrderBook<Notification>::queueTriggeredOrders() {}
-
-template <class Notification>
-void OrderBook<Notification>::processTriggeredOrders() {}
-
-template <class Notification>
 void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
-    auto lp = last_price;
-    scope_exit defer([this, &lp]() { postProcess(lp); });
-
     static const auto tradeNotification = [this](OrderID mOrderID, OrderID tOrderID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty,
                                                  Decimal price) {
         this->putTradeNotification(mOrderID, tOrderID, mOrderStatus, tOrderStatus, qty, price);
         this->last_price = price;
     };
-    static const auto postOrderFill = [this](OrderID id) { this->cancelOrder(id); };
+    static const auto postOrderFill = [this](OrderID id) { this->eraseOrder(id); };
 
     if (type == Type::Market) {
         if (side == Side::Buy) {
@@ -233,7 +125,7 @@ void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Dec
 
     auto qtyLeft = qty - qtyProcessed;
     if (qtyLeft > uint64_t(0)) {
-        auto* o = order_pool_.acquire(id, type, side, qtyLeft, price, uint64_t(0), flag);
+        auto* o = order_pool_.acquire(id, type, side, qtyLeft, price, flag);
         if (side == Side::Buy) {
             bids_.append(o);
         } else {
@@ -252,13 +144,8 @@ void OrderBook<Notification>::putTradeNotification(OrderID mOrderID, OrderID tOr
 }
 
 template <class Notification>
-void OrderBook<Notification>::cancelOrder(uint64_t tok, OrderID id) {
-    uint64_t exp = tok - 1;
-    if (!last_token_.compare_exchange_strong(exp, tok, std::memory_order_acq_rel, std::memory_order_acquire)) [[unlikely]] {
-        throw std::invalid_argument("invalid token received: cannot maintain determinism");
-    }
-
-    auto qty = cancelOrder(id);  // an order with 0 qty shouldn't be in the book
+void OrderBook<Notification>::cancelOrder(OrderID id) {
+    auto qty = eraseOrder(id);
     if (qty.is_zero()) {
         notification_.putOrder(MsgType::CancelOrder, OrderStatus::Rejected, id, uint64_t(0), Error::OrderNotExists);
         return;
@@ -268,30 +155,24 @@ void OrderBook<Notification>::cancelOrder(uint64_t tok, OrderID id) {
 }
 
 template <class Notification>
-Decimal OrderBook<Notification>::cancelOrder(OrderID id) {
-    if (orders_.find(id, orderbook::OrderIDCompare()) == orders_.end()) {
-        // TODO cancel triger
+Decimal OrderBook<Notification>::eraseOrder(OrderID id) {
+    auto it = orders_.find(id, OrderIDCompare());
+    if (it == orders_.end()) {
         return uint64_t(0);
     }
 
-    auto it = orders_.find(id, OrderIDCompare());
-    if (it != orders_.end()) {
-        auto& pool = order_pool_;
-        auto* order = &*it;
-        scope_exit defer([&pool, &order]() { pool.release(order); });
-        orders_.erase(*it);
+    auto& pool = order_pool_;
+    auto* order = &*it;
+    scope_exit defer([&pool, &order]() { pool.release(order); });
+    orders_.erase(*it);
 
-        if (order->side == Side::Buy) {
-            bids_.remove(order);
-            return order->qty;
-        }
-
-        asks_.remove(order);
-
+    if (order->side == Side::Buy) {
+        bids_.remove(order);
         return order->qty;
     }
 
-    return uint64_t(0);
+    asks_.remove(order);
+    return order->qty;
 }
 
 template <class Notification>

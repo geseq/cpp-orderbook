@@ -68,7 +68,7 @@ void throughput(int64_t seed, int duration, orderbook::Decimal lowerBound, order
     orderbook::Decimal bid, ask, bidQty, askQty;
     std::tie(bid, ask, bidQty, askQty) = getInitialVars(lowerBound, upperBound, minSpread);
 
-    uint64_t tok = 0, buyID = 0, sellID = 0, operations = 0;
+    uint64_t nextID = 0, buyID = 0, sellID = 0, operations = 0;
 
     auto end = std::chrono::steady_clock::now() + std::chrono::seconds(duration);
     std::default_random_engine generator(seed);
@@ -86,12 +86,12 @@ void throughput(int64_t seed, int duration, orderbook::Decimal lowerBound, order
             std::tie(bid, ask) = getPrice(bid, ask, minSpread, true);
         }
 
-        ob->cancelOrder(++tok, buyID);
-        ob->cancelOrder(++tok, sellID);
-        buyID = ++tok;
-        sellID = ++tok;
-        ob->addOrder(buyID, buyID, Type::Limit, Side::Buy, bidQty, bid, Decimal(0, 0), Flag::None);
-        ob->addOrder(sellID, sellID, Type::Limit, Side::Sell, askQty, ask, Decimal(0, 0), Flag::None);
+        ob->cancelOrder(buyID);
+        ob->cancelOrder(sellID);
+        buyID = ++nextID;
+        sellID = ++nextID;
+        ob->addOrder(buyID, Type::Limit, Side::Buy, bidQty, bid, Flag::None);
+        ob->addOrder(sellID, Type::Limit, Side::Sell, askQty, ask, Flag::None);
 
         operations += 4;  // 2 cancels + 2 adds
     }

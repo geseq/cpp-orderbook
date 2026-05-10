@@ -17,8 +17,8 @@ TEST_F(OrderQueueTest, TestOrderQueue) {
     Decimal price(100, 0);
     auto oq = std::make_unique<OrderQueue>(price);
 
-    auto o1 = Order(1, Type::Limit, Side::Buy, Decimal(100, 0), Decimal(100, 0), Decimal(0, 0), Flag::None);
-    auto o2 = Order(2, Type::Limit, Side::Buy, Decimal(100, 0), Decimal(100, 0), Decimal(0, 0), Flag::None);
+    auto o1 = Order(1, Type::Limit, Side::Buy, Decimal(100, 0), Decimal(100, 0), Flag::None);
+    auto o2 = Order(2, Type::Limit, Side::Buy, Decimal(100, 0), Decimal(100, 0), Flag::None);
 
     oq->append(&o1);
     oq->append(&o2);

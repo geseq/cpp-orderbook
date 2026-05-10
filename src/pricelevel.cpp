@@ -30,12 +30,10 @@ Decimal PriceLevel<P>::volume() {
 
 template <PriceType P>
 void PriceLevel<P>::append(Order* order) {
-    auto price = order->getPrice<P>();
-
-    auto it = price_tree_.find(price);
+    auto it = price_tree_.find(order->price);
     auto q = &*it;
     if (it == price_tree_.end()) {
-        q = queue_pool_.acquire(price);
+        q = queue_pool_.acquire(order->price);
         price_tree_.insert_equal(*q);
         ++depth_;
     }
@@ -48,8 +46,6 @@ void PriceLevel<P>::append(Order* order) {
 
 template <PriceType P>
 void PriceLevel<P>::remove(Order* order) {
-    auto price = order->getPrice<P>();
-
     auto q = order->queue;
     if (q != nullptr) {
         q->remove(order);
@@ -194,8 +190,6 @@ OrderQueue* PriceLevel<P>::getNextQueue(const Decimal& price) {
 
 template class PriceLevel<PriceType::Bid>;
 template class PriceLevel<PriceType::Ask>;
-template class PriceLevel<PriceType::TriggerOver>;
-template class PriceLevel<PriceType::TriggerUnder>;
 
 template Decimal PriceLevel<PriceType::Bid>::processMarketOrder<PriceType::Bid>(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID,
                                                                                 Decimal qty, Flag flag);

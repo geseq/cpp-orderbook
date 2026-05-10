@@ -54,10 +54,6 @@ std::ostream& operator<<(std::ostream& os, const PriceType& priceType) {
             return os << "Bid";
         case PriceType::Ask:
             return os << "Ask";
-        case PriceType::TriggerOver:
-            return os << "TriggerOver";
-        case PriceType::TriggerUnder:
-            return os << "TriggerUnder";
     }
     return os << "Unknown";
 }
@@ -68,8 +64,6 @@ std::ostream& operator<<(std::ostream& os, const Error& error) {
             return os << "InvalidQty";
         case Error::InvalidPrice:
             return os << "InvalidPrice";
-        case Error::InvalidTriggerPrice:
-            return os << "InvalidTriggerPrice";
         case Error::OrderID:
             return os << "OrderID";
         case Error::OrderExists:
@@ -94,10 +88,6 @@ std::ostream& operator<<(std::ostream& os, const Flag& flag) {
             return os << "AoN";
         case Flag::FoK:
             return os << "FoK";
-        case Flag::StopLoss:
-            return os << "StopLoss";
-        case Flag::TakeProfit:
-            return os << "TakeProfit";
         case Flag::Snapshot:
             return os << "Snapshot";
     }

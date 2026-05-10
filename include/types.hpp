@@ -45,8 +45,6 @@ std::ostream& operator<<(std::ostream& os, const OrderStatus& status);
 enum class PriceType {
     Bid,
     Ask,
-    TriggerOver,
-    TriggerUnder,
 };
 
 std::ostream& operator<<(std::ostream& os, const PriceType& priceType);
@@ -54,7 +52,6 @@ std::ostream& operator<<(std::ostream& os, const PriceType& priceType);
 enum class Error : uint16_t {
     InvalidQty,
     InvalidPrice,
-    InvalidTriggerPrice,
     OrderID,
     OrderExists,
     OrderNotExists,
@@ -69,9 +66,7 @@ enum Flag : uint8_t {
     IoC = 1,
     AoN = 2,
     FoK = 4,
-    StopLoss = 8,
-    TakeProfit = 16,
-    Snapshot = 32
+    Snapshot = 8,
 };
 
 std::ostream& operator<<(std::ostream& os, const Flag& flag);

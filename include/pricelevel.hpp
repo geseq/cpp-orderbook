@@ -25,7 +25,7 @@ template <PriceType P>
 class PriceLevel {
     pool::AdaptiveObjectPool<OrderQueue> queue_pool_;
 
-    using CompareType = std::conditional_t<(P == PriceType::Bid || P == PriceType::TriggerOver), CmpGreater, CmpLess>;
+    using CompareType = std::conditional_t<P == PriceType::Bid, CmpGreater, CmpLess>;
     using PriceTree = boost::intrusive::rbtree<OrderQueue, CompareType>;
     PriceTree price_tree_;
 

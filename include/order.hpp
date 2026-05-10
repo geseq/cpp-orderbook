@@ -17,7 +17,6 @@ struct Order : public set_base_hook<optimize_size<false>>, list_base_hook<consta
     OrderID id;
     Decimal qty;
     Decimal price;
-    Decimal trig_price;
     Type type;
     Flag flag;
     Side side;
@@ -25,18 +24,6 @@ struct Order : public set_base_hook<optimize_size<false>>, list_base_hook<consta
     OrderQueue *queue = nullptr;
 
     Order(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) : id(id), qty(qty), price(price), type(type), side(side), flag(flag){};
-
-    Order(OrderID id, Type type, Side side, Decimal qty, Decimal price, Decimal trig_price, Flag flag)
-        : id(id), qty(qty), price(price), trig_price(trig_price), type(type), side(side), flag(flag){};
-
-    template <PriceType pt>
-    Decimal getPrice() {
-        if constexpr (pt == PriceType::TriggerOver || pt == PriceType::TriggerUnder) {
-            return trig_price;
-        }
-
-        return price;
-    }
 
     friend bool operator<(const Order &a, const Order &b) { return a.id < b.id; }
     friend bool operator>(const Order &a, const Order &b) { return a.id > b.id; }
