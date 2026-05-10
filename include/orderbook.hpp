@@ -126,6 +126,7 @@ void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Dec
     auto qtyLeft = qty - qtyProcessed;
     if (qtyLeft > uint64_t(0)) {
         auto* o = order_pool_.acquire(id, type, side, qtyLeft, price, flag);
+        o->original_qty = qty;
         if (side == Side::Buy) {
             bids_.append(o);
         } else {
