@@ -66,6 +66,7 @@ enum Flag : uint8_t {
     IoC = 1,
     AoN = 2,
     FoK = 4,
+    Snapshot = 8,
 };
 
 std::ostream& operator<<(std::ostream& os, const Flag& flag);

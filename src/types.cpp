@@ -88,6 +88,8 @@ std::ostream& operator<<(std::ostream& os, const Flag& flag) {
             return os << "AoN";
         case Flag::FoK:
             return os << "FoK";
+        case Flag::Snapshot:
+            return os << "Snapshot";
     }
     return os << "Unknown";
 }
