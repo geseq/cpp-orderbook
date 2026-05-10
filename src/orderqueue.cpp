@@ -49,7 +49,7 @@ Decimal OrderQueue::process(const TradeNotification& tradeNotification, const Po
             qty -= matchedQty;
             total_qty_ -= matchedQty;
             ++it;
-            ho->qty = uint64_t(0);
+            ho->qty = Decimal{};
             postFill(ho->id);
             const auto takerStatus = qty.is_zero() ? OrderStatus::FilledComplete : OrderStatus::FilledPartial;
             tradeNotification(ho->id, takerOrderID, OrderStatus::FilledComplete, takerStatus, matchedQty, ho->price);
