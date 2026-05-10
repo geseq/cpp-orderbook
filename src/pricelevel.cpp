@@ -79,7 +79,7 @@ Decimal PriceLevel<P>::processMarketOrder(const TradeNotification& tn, const Pos
     if ((flag & (AoN | FoK)) != 0) {
         // Sum totalQty() across all queues for an accurate available-volume check
         // (volume_ can lag behind after partial fills).
-        Decimal availableQty = {};
+        Decimal availableQty = uint64_t(0);
         for (auto it = price_tree_.begin(); it != price_tree_.end() && availableQty < qty; ++it) {
             availableQty += it->totalQty();
         }
