@@ -33,4 +33,4 @@ jobs:
       # Build your program with the given configuration
       run: |
         cd build
-        ctest -C ${{env.BUILD_TYPE}} -L test --force-new-test-process -V  --timeout 1800
+        ctest -C ${{env.BUILD_TYPE}} -L test -V --timeout 1800
