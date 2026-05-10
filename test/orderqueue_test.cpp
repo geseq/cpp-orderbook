@@ -99,4 +99,36 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessUpdatesTotalQtyOnExactFill) {
     EXPECT_EQ(oq->totalQty(), Decimal(0, 0));
 }
 
+TEST_F(OrderQueueTest, TestOrderQueue_ProcessZeroesFilledOrderBeforePostFill) {
+    Decimal price(100, 0);
+    auto oq = std::make_unique<OrderQueue>(price);
+
+    auto o1 = Order(1, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
+    auto o2 = Order(2, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
+
+    oq->append(&o1);
+    oq->append(&o2);
+
+    bool sawZeroQtyOnPostFill = false;
+    const TradeNotification tn = [](OrderID, OrderID, OrderStatus, OrderStatus, Decimal, Decimal) {};
+    const PostOrderFill pf = [&oq, &o1, &o2, &sawZeroQtyOnPostFill](OrderID id) {
+        if (id == 1) {
+            sawZeroQtyOnPostFill = (o1.qty == Decimal(0, 0));
+            oq->remove(&o1);
+        } else if (id == 2) {
+            oq->remove(&o2);
+        }
+    };
+
+    auto qtyProcessed = oq->process(tn, pf, 902, Decimal(150, 0));
+
+    EXPECT_EQ(qtyProcessed, Decimal(150, 0));
+    EXPECT_TRUE(sawZeroQtyOnPostFill);
+    EXPECT_EQ(oq->len(), 1);
+    EXPECT_EQ(oq->totalQty(), Decimal(50, 0));
+
+    // remove from container before destroying
+    oq->remove(&o2);
+}
+
 }  // namespace orderbook::test

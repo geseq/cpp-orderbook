@@ -76,6 +76,17 @@ class LimitOrderTest : public ::testing::Test {
     }
 };
 
+TEST_F(LimitOrderTest, TestFlagsAreBitmaskCompatibleForAoNAndFoKChecks) {
+    EXPECT_EQ(orderbook::IoC, 1);
+    EXPECT_EQ(orderbook::AoN, 2);
+    EXPECT_EQ(orderbook::FoK, 4);
+    EXPECT_EQ(orderbook::Snapshot, 8);
+
+    EXPECT_NE((orderbook::AoN | orderbook::FoK) & orderbook::AoN, 0);
+    EXPECT_NE((orderbook::AoN | orderbook::FoK) & orderbook::FoK, 0);
+    EXPECT_EQ((orderbook::AoN | orderbook::FoK) & orderbook::IoC, 0);
+}
+
 TEST_F(LimitOrderTest, TestLimitOrder_Create) {
     for (int i = 50; i < 100; i += 10) {
         n.Reset();
