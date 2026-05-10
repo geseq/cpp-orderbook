@@ -44,17 +44,21 @@ Decimal OrderQueue::process(const TradeNotification& tradeNotification, const Po
             tradeNotification(ho->id, takerOrderID, OrderStatus::FilledPartial, OrderStatus::FilledComplete, qty, ho->price);
             break;
         } else if (qty > ho->qty) {
-            qtyProcessed += ho->qty;
-            qty -= ho->qty;
+            auto matchedQty = ho->qty;
+            qtyProcessed += matchedQty;
+            qty -= matchedQty;
             ++it;
+            ho->qty = uint64_t(0);
             postFill(ho->id);
-            tradeNotification(ho->id, takerOrderID, OrderStatus::FilledComplete, OrderStatus::FilledPartial, ho->qty, ho->price);
+            tradeNotification(ho->id, takerOrderID, OrderStatus::FilledComplete, OrderStatus::FilledPartial, matchedQty, ho->price);
         } else {
-            qtyProcessed += ho->qty;
-            qty -= ho->qty;
+            auto matchedQty = ho->qty;
+            qtyProcessed += matchedQty;
+            qty -= matchedQty;
             ++it;
+            ho->qty = uint64_t(0);
             postFill(ho->id);
-            tradeNotification(ho->id, takerOrderID, OrderStatus::FilledComplete, OrderStatus::FilledComplete, ho->qty, ho->price);
+            tradeNotification(ho->id, takerOrderID, OrderStatus::FilledComplete, OrderStatus::FilledComplete, matchedQty, ho->price);
         }
     }
 

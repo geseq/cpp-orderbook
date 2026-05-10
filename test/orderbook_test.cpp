@@ -236,6 +236,18 @@ TEST_F(LimitOrderTest, TestMarketProcess) {
     // clang-format on
 }
 
+TEST_F(LimitOrderTest, TestMarketAoN_UsesCachedSideQtyAfterPartialFill) {
+    addDepth(ob);
+    n.Reset();
+
+    processLine(ob, "850	M	B	1	0	N");
+    n.Verify({"CreateOrder Accepted 850 1", "6 850 FilledPartial FilledComplete 1 100"});
+
+    n.Reset();
+    processLine(ob, "851	M	B	10	0	A");
+    n.Verify({"CreateOrder Accepted 851 10"});
+}
+
 TEST_F(LimitOrderTest, TestMarketProcess_PriceLevel_FIFO) {
     addDepth(ob, 0);
     addDepth(ob, 1);

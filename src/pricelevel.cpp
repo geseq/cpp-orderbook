@@ -76,16 +76,8 @@ template <PriceType Q>
 Decimal PriceLevel<P>::processMarketOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal qty, Flag flag) {
     static_assert(Q == PriceType::Bid || Q == PriceType::Ask, "Unsupported PriceType");
 
-    if ((flag & (AoN | FoK)) != 0) {
-        // Sum totalQty() across all queues for an accurate available-volume check
-        // (volume_ can lag behind after partial fills).
-        Decimal availableQty = uint64_t(0);
-        for (auto it = price_tree_.begin(); it != price_tree_.end() && availableQty < qty; ++it) {
-            availableQty += it->totalQty();
-        }
-        if (availableQty < qty) {
-            return uint64_t(0);
-        }
+    if ((flag & (AoN | FoK)) != 0 && qty > volume_) {
+        return uint64_t(0);
     }
 
     auto qtyLeft = qty;
@@ -94,6 +86,7 @@ Decimal PriceLevel<P>::processMarketOrder(const TradeNotification& tn, const Pos
         auto pq = q->process(tn, pf, takerOrderID, qtyLeft);
         qtyLeft -= pq;
         qtyProcessed += pq;
+        volume_ -= pq;
     }
 
     return qtyProcessed;
@@ -166,6 +159,7 @@ Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const Post
         Decimal result = orderQueue->process(tn, pf, takerOrderID, qtyLeft);
         qtyLeft -= result;
         qtyProcessed += result;
+        volume_ -= result;
     }
 
     return qtyProcessed;
