@@ -817,8 +817,20 @@ TEST_F(LimitOrderTest, TestDeterminism_ReplayProducesSameExecutionTraceAndBookSt
     const auto [reportsB, bookB, lastPriceB] = replay(actions);
     const auto [reportsC, bookC, lastPriceC] = replay(actions);
 
+    const auto containsReport = [](const std::vector<std::string>& reports, const std::string& expected) {
+        for (const auto& report : reports) {
+            if (report == expected) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     ASSERT_EQ(reportsA, reportsB);
     ASSERT_EQ(reportsA, reportsC);
+    ASSERT_TRUE(containsReport(reportsA, "CreateOrder Rejected 1 0 0 ErrInvalidQty"));
+    ASSERT_TRUE(containsReport(reportsA, "CancelOrder Canceled 2 2 2"));
+    ASSERT_TRUE(containsReport(reportsA, "CancelOrder Rejected 2 0 0 ErrOrderNotExists"));
     ASSERT_EQ(bookA, bookB);
     ASSERT_EQ(bookA, bookC);
     ASSERT_EQ(lastPriceA, lastPriceB);
