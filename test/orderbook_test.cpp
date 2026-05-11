@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "util.cpp"
@@ -750,6 +752,94 @@ TEST_F(LimitOrderTest, TestFoK_MarketBuy_CannotFill) {
 
     processLine(ob, "811	M	B	11	0	F");
     n.Verify({"CreateOrder Accepted 811 11 11"});
+}
+
+TEST_F(LimitOrderTest, TestDeterminism_ReplayProducesSameExecutionTraceAndBookState) {
+    struct Action {
+        enum class Kind : uint8_t { Add, Cancel, SetMatching };
+        Kind kind;
+        OrderID id = 0;
+        Type type = Type::Limit;
+        Side side = Side::Buy;
+        Decimal qty = Decimal(0, 0);
+        Decimal price = Decimal(0, 0);
+        Flag flag = Flag::None;
+        bool matching = true;
+    };
+
+    const auto replay = [](const std::vector<Action>& actions) {
+        Notification notification;
+        auto localOb = std::make_shared<orderbook::OrderBook<Notification>>(notification);
+
+        for (const auto& action : actions) {
+            if (action.kind == Action::Kind::SetMatching) {
+                localOb->setMatching(action.matching);
+            } else if (action.kind == Action::Kind::Cancel) {
+                localOb->cancelOrder(action.id);
+            } else {
+                localOb->addOrder(action.id, action.type, action.side, action.qty, action.price, action.flag);
+            }
+        }
+
+        return std::tuple{notification.Strings(), localOb->toString(), localOb->last_price};
+    };
+
+    const std::vector<Action> actions = {
+        // Rejections and no-matching mode branches.
+        {Action::Kind::Add, 1, Type::Limit, Side::Buy, Decimal(0, 0), Decimal(100, 0), Flag::None},
+        {Action::Kind::Add, 2, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(90, 0), Flag::None},
+        {Action::Kind::Cancel, 2},
+        {Action::Kind::Cancel, 2},
+        {Action::Kind::SetMatching, 0, Type::Limit, Side::Buy, Decimal(0, 0), Decimal(0, 0), Flag::None, false},
+        {Action::Kind::Add, 3, Type::Market, Side::Buy, Decimal(1, 0), Decimal(0, 0), Flag::None},
+        {Action::Kind::Add, 4, Type::Limit, Side::Sell, Decimal(1, 0), Decimal(80, 0), Flag::None},
+        {Action::Kind::Add, 5, Type::Limit, Side::Buy, Decimal(1, 0), Decimal(70, 0), Flag::None},
+        {Action::Kind::SetMatching, 0, Type::Limit, Side::Buy, Decimal(0, 0), Decimal(0, 0), Flag::None, true},
+        // Build depth and duplicate/invalid limit branches.
+        {Action::Kind::Add, 6, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(90, 0), Flag::None},
+        {Action::Kind::Add, 6, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(90, 0), Flag::None},
+        {Action::Kind::Add, 7, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None},
+        {Action::Kind::Add, 8, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(110, 0), Flag::None},
+        {Action::Kind::Add, 9, Type::Limit, Side::Buy, Decimal(1, 0), Decimal(0, 0), Flag::None},
+        // Matching paths for all flags and both types.
+        {Action::Kind::Add, 10, Type::Limit, Side::Buy, Decimal(3, 0), Decimal(100, 0), Flag::None},
+        {Action::Kind::Add, 11, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(90, 0), Flag::IoC},
+        {Action::Kind::Add, 12, Type::Limit, Side::Buy, Decimal(3, 0), Decimal(100, 0), Flag::AoN},
+        {Action::Kind::Add, 13, Type::Limit, Side::Buy, Decimal(4, 0), Decimal(120, 0), Flag::FoK},
+        {Action::Kind::Add, 14, Type::Market, Side::Sell, Decimal(3, 0), Decimal(0, 0), Flag::None},
+        {Action::Kind::Add, 15, Type::Market, Side::Buy, Decimal(5, 0), Decimal(0, 0), Flag::AoN},
+        {Action::Kind::Add, 16, Type::Market, Side::Buy, Decimal(2, 0), Decimal(0, 0), Flag::FoK},
+        {Action::Kind::Cancel, 8},
+        {Action::Kind::Cancel, 999},
+    };
+
+    const auto [reportsA, bookA, lastPriceA] = replay(actions);
+    const auto [reportsB, bookB, lastPriceB] = replay(actions);
+    const auto [reportsC, bookC, lastPriceC] = replay(actions);
+
+    ASSERT_EQ(reportsA, reportsB);
+    ASSERT_EQ(reportsA, reportsC);
+    ASSERT_EQ(bookA, bookB);
+    ASSERT_EQ(bookA, bookC);
+    ASSERT_EQ(lastPriceA, lastPriceB);
+    ASSERT_EQ(lastPriceA, lastPriceC);
+}
+
+TEST_F(LimitOrderTest, TestDeterminism_IndependentBooksStayIsolated) {
+    Notification n1;
+    Notification n2;
+    auto ob1 = std::make_shared<orderbook::OrderBook<Notification>>(n1);
+    auto ob2 = std::make_shared<orderbook::OrderBook<Notification>>(n2);
+
+    ob1->addOrder(1000, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(100, 0), Flag::None);
+    ob1->addOrder(1001, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None);
+
+    ob2->addOrder(2000, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(100, 0), Flag::None);
+    ob2->addOrder(2001, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None);
+
+    n1.Verify({"CreateOrder Accepted 1000 2 2", "CreateOrder Accepted 1001 2 2", "1000 1001 FilledComplete FilledComplete 2 100"});
+    n2.Verify({"CreateOrder Accepted 2000 2 2", "CreateOrder Accepted 2001 2 2", "2000 2001 FilledComplete FilledComplete 2 100"});
+    ASSERT_EQ(ob1->toString(), ob2->toString());
 }
 
 int main(int argc, char** argv) {
