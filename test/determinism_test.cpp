@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -272,9 +274,4 @@ TEST_F(DeterminismTest, TwoCopiesPerMarketRemainDeterministicWithDifferentInterl
     ASSERT_TRUE(hasReportContaining(nB1.Strings(), "CreateOrder Rejected"));
     ASSERT_TRUE(hasReportContaining(nB1.Strings(), "CancelOrder Canceled"));
     ASSERT_TRUE(hasReportContaining(nB1.Strings(), "CancelOrder Rejected"));
-}
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
 }
