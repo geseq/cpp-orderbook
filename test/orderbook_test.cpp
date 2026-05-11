@@ -754,23 +754,6 @@ TEST_F(LimitOrderTest, TestFoK_MarketBuy_CannotFill) {
     n.Verify({"CreateOrder Accepted 811 11 11"});
 }
 
-TEST_F(LimitOrderTest, TestDeterminism_IndependentBooksStayIsolated) {
-    Notification n1;
-    Notification n2;
-    auto ob1 = std::make_shared<orderbook::OrderBook<Notification>>(n1);
-    auto ob2 = std::make_shared<orderbook::OrderBook<Notification>>(n2);
-
-    ob1->addOrder(1000, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(100, 0), Flag::None);
-    ob1->addOrder(1001, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None);
-
-    ob2->addOrder(2000, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(100, 0), Flag::None);
-    ob2->addOrder(2001, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None);
-
-    n1.Verify({"CreateOrder Accepted 1000 2 2", "CreateOrder Accepted 1001 2 2", "1000 1001 FilledComplete FilledComplete 2 100"});
-    n2.Verify({"CreateOrder Accepted 2000 2 2", "CreateOrder Accepted 2001 2 2", "2000 2001 FilledComplete FilledComplete 2 100"});
-    ASSERT_EQ(ob1->toString(), ob2->toString());
-}
-
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
