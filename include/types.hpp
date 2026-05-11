@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cwchar>
 #include <iostream>
+#include <optional>
 
 #include "decimal.hpp"
 
@@ -71,37 +72,49 @@ enum Flag : uint8_t {
 
 std::ostream& operator<<(std::ostream& os, const Flag& flag);
 
-struct Trade {
-    uint64_t MakerOrderID;
-    uint64_t TakerOrderID;
-    OrderStatus MakerStatus;
-    OrderStatus TakerStatus;
-    Decimal Qty;
-    Decimal Price;
+enum class ExecType : uint8_t {
+    New,
+    Rejected,
+    Canceled,
+    Trade,
+};
+
+std::ostream& operator<<(std::ostream& os, const ExecType& execType);
+
+struct ExecutionReport {
+    ExecType exec_type{};
+
+    // Order event fields (New, Rejected, Canceled)
+    MsgType msg_type{};
+    OrderID order_id{};
+    OrderStatus status{};
+    Decimal qty{};
+    Decimal original_qty{};
+
+    // Trade event fields
+    OrderID maker_order_id{};
+    OrderID taker_order_id{};
+    OrderStatus maker_status{};
+    OrderStatus taker_status{};
+    Decimal last_qty{};
+    Decimal last_price{};
+
+    // Rejection reason (Rejected only)
+    std::optional<Error> error{};
 };
 
 // Notification is the interface for actual implementation of a notification handler
 template <typename Implementation>
 class NotificationInterface {
    public:
-    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty, Decimal original_qty, Error err) {
-        static_cast<Implementation*>(this)->putOrder(msgtype, status, id, qty, original_qty, err);
-    }
-
-    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty, Decimal original_qty) { static_cast<Implementation*>(this)->putOrder(msgtype, status, id, qty, original_qty); }
-
-    void putTrade(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {
-        static_cast<Implementation*>(this)->putTrade(mOrderID, tOrderID, mStatus, tStatus, qty, price);
+    void onExecutionReport(const ExecutionReport& report) {
+        static_cast<Implementation*>(this)->onExecutionReport(report);
     }
 };
 
 class EmptyNotification : public NotificationInterface<EmptyNotification> {
    public:
-    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty, Decimal original_qty, Error err) {}
-
-    void putOrder(MsgType msgtype, OrderStatus status, OrderID id, Decimal qty, Decimal original_qty) {}
-
-    void putTrade(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {}
+    void onExecutionReport(const ExecutionReport&) {}
 };
 
 }  // namespace orderbook

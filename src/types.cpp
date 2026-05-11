@@ -94,4 +94,18 @@ std::ostream& operator<<(std::ostream& os, const Flag& flag) {
     return os << "Unknown";
 }
 
+std::ostream& operator<<(std::ostream& os, const ExecType& execType) {
+    switch (execType) {
+        case ExecType::New:
+            return os << "New";
+        case ExecType::Rejected:
+            return os << "Rejected";
+        case ExecType::Canceled:
+            return os << "Canceled";
+        case ExecType::Trade:
+            return os << "Trade";
+    }
+    return os << "Unknown";
+}
+
 }  // namespace orderbook
