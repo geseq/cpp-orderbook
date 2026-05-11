@@ -17,102 +17,54 @@ using orderbook::OrderStatus;
 using orderbook::Side;
 using orderbook::Type;
 
-class NotificationBase {
-   public:
-    virtual ~NotificationBase() = default;
-    [[nodiscard]] virtual std::string to_string() const = 0;
-};
-
-struct OrderNotification : public NotificationBase {
-    orderbook::MsgType msg_type_;
-    orderbook::OrderStatus status_;
-    orderbook::OrderID order_id_;
-    orderbook::Decimal qty_;
-    orderbook::Decimal original_qty_;
-    std::optional<orderbook::Error> error_;
-
-    OrderNotification(orderbook::MsgType msg_type, orderbook::OrderStatus status, orderbook::OrderID order_id, const orderbook::Decimal& qty,
-                      const orderbook::Decimal& original_qty, std::optional<orderbook::Error> error)
-        : msg_type_(msg_type), status_(status), order_id_(order_id), qty_(qty), original_qty_(original_qty), error_(error){};
-
-    [[nodiscard]] std::string to_string() const override {
-        std::ostringstream os;
-        if (error_.has_value()) {
-            os << msg_type_ << " " << status_ << " " << order_id_ << " " << qty_ << " " << original_qty_ << " Err" << *error_;
-        } else {
-            os << msg_type_ << " " << status_ << " " << order_id_ << " " << qty_ << " " << original_qty_;
-        }
-        return os.str();
-    }
-};
-
-struct Trade : public NotificationBase {
-    OrderID MakerOrderID;
-    OrderID TakerOrderID;
-    OrderStatus MakerStatus;
-    OrderStatus TakerStatus;
-    Decimal Qty;
-    Decimal Price;
-
-    Trade(OrderID mID, OrderID tID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price)
-        : MakerOrderID(mID), TakerOrderID(tID), MakerStatus(mStatus), TakerStatus(tStatus), Qty(qty), Price(price) {}
-
-    std::string to_string() const override {
-        std::ostringstream os;
-        os << MakerOrderID << " " << TakerOrderID << " " << MakerStatus << " " << TakerStatus << " " << Qty.to_string() << " " << Price.to_string();
-        return os.str();
-    }
-};
-
 class Notification : public orderbook::NotificationInterface<Notification> {
    public:
-    void Reset() { n.clear(); }
+    void Reset() { reports_.clear(); }
 
-    void putOrder(MsgType m, OrderStatus s, OrderID orderID, Decimal qty, Decimal original_qty, orderbook::Error err) {
-        auto notification = std::make_shared<OrderNotification>(m, s, orderID, qty, original_qty, err);
-        n.emplace_back(notification);
-    }
-
-    void putOrder(MsgType m, OrderStatus s, OrderID orderID, Decimal qty, Decimal original_qty) {
-        auto notification = std::make_shared<OrderNotification>(m, s, orderID, qty, original_qty, std::optional<orderbook::Error>{});
-        n.emplace_back(notification);
-    }
-
-    void putTrade(OrderID mID, OrderID tID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {
-        auto notification = std::make_shared<Trade>(mID, tID, mStatus, tStatus, qty, price);
-        n.emplace_back(notification);
-    }
+    void onExecutionReport(const orderbook::ExecutionReport& r) { reports_.emplace_back(r); }
 
     std::vector<std::string> Strings() const {
         std::vector<std::string> res;
-        for (const auto& item : n) {
-            res.push_back(item->to_string());
+        for (const auto& r : reports_) {
+            res.push_back(to_string(r));
         }
         return res;
     }
 
     std::string String() const {
         std::ostringstream oss;
-        for (const auto& item : n) {
-            oss << item->to_string() << '\n';
+        for (const auto& r : reports_) {
+            oss << to_string(r) << '\n';
         }
         return oss.str();
     }
 
     bool hasError() {
-        for (const auto& item : n) {
-            auto notification = dynamic_cast<OrderNotification*>(item.get());
-            if (notification != nullptr && notification->error_) {
+        for (const auto& r : reports_) {
+            if (r.exec_type == orderbook::ExecType::Rejected) {
                 return true;
             }
         }
-
         return false;
     }
 
     void Verify(const std::vector<std::string>& expected) const { ASSERT_EQ(expected, Strings()); }
 
    private:
-    std::vector<std::shared_ptr<NotificationBase>> n;
+    std::vector<orderbook::ExecutionReport> reports_;
+
+    static std::string to_string(const orderbook::ExecutionReport& r) {
+        std::ostringstream os;
+        if (r.exec_type == orderbook::ExecType::Trade) {
+            os << r.maker_order_id << " " << r.taker_order_id << " " << r.maker_status << " " << r.taker_status << " " << r.last_qty.to_string() << " "
+               << r.last_price.to_string();
+        } else {
+            os << r.msg_type << " " << r.status << " " << r.order_id << " " << r.qty << " " << r.original_qty;
+            if (r.error.has_value()) {
+                os << " Err" << *r.error;
+            }
+        }
+        return os.str();
+    }
 };
 

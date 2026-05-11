@@ -53,26 +53,58 @@ class OrderBook {
 template <class Notification>
 void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
     if (qty.is_zero()) [[unlikely]] {
-        notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, qty, Error::InvalidQty);
+        notification_.onExecutionReport(ExecutionReport{
+            .exec_type = ExecType::Rejected,
+            .msg_type = MsgType::CreateOrder,
+            .order_id = id,
+            .status = OrderStatus::Rejected,
+            .qty = qty,
+            .original_qty = qty,
+            .error = Error::InvalidQty,
+        });
         return;
     }
 
     if (!matching_) [[unlikely]] {
         if (type == Type::Market) {
-            notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, qty, Error::NoMatching);
+            notification_.onExecutionReport(ExecutionReport{
+                .exec_type = ExecType::Rejected,
+                .msg_type = MsgType::CreateOrder,
+                .order_id = id,
+                .status = OrderStatus::Rejected,
+                .qty = qty,
+                .original_qty = qty,
+                .error = Error::NoMatching,
+            });
             return;
         }
 
         if (side == Side::Buy) {
             auto q = asks_.getQueue();
             if (q != nullptr && q->price() <= price) {
-                notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, qty, Error::NoMatching);
+                notification_.onExecutionReport(ExecutionReport{
+                    .exec_type = ExecType::Rejected,
+                    .msg_type = MsgType::CreateOrder,
+                    .order_id = id,
+                    .status = OrderStatus::Rejected,
+                    .qty = qty,
+                    .original_qty = qty,
+                    .error = Error::NoMatching,
+                });
                 return;
             }
         } else {
             auto q = bids_.getQueue();
             if (q != nullptr && q->price() >= price) {
-                notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, qty, qty, Error::NoMatching);
+                notification_.onExecutionReport(ExecutionReport{
+                    .exec_type = ExecType::Rejected,
+                    .msg_type = MsgType::CreateOrder,
+                    .order_id = id,
+                    .status = OrderStatus::Rejected,
+                    .qty = qty,
+                    .original_qty = qty,
+                    .error = Error::NoMatching,
+                });
                 return;
             }
         }
@@ -80,17 +112,40 @@ void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal
 
     if (type != Type::Market) {
         if (orders_.find(id, orderbook::OrderIDCompare()) != orders_.end()) {
-            notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, uint64_t(0), qty, Error::OrderExists);
+            notification_.onExecutionReport(ExecutionReport{
+                .exec_type = ExecType::Rejected,
+                .msg_type = MsgType::CreateOrder,
+                .order_id = id,
+                .status = OrderStatus::Rejected,
+                .qty = uint64_t(0),
+                .original_qty = qty,
+                .error = Error::OrderExists,
+            });
             return;
         }
 
         if (price.is_zero()) {
-            notification_.putOrder(MsgType::CreateOrder, OrderStatus::Rejected, id, uint64_t(0), qty, Error::InvalidPrice);
+            notification_.onExecutionReport(ExecutionReport{
+                .exec_type = ExecType::Rejected,
+                .msg_type = MsgType::CreateOrder,
+                .order_id = id,
+                .status = OrderStatus::Rejected,
+                .qty = uint64_t(0),
+                .original_qty = qty,
+                .error = Error::InvalidPrice,
+            });
             return;
         }
     }
 
-    notification_.putOrder(MsgType::CreateOrder, OrderStatus::Accepted, id, qty, qty);
+    notification_.onExecutionReport(ExecutionReport{
+        .exec_type = ExecType::New,
+        .msg_type = MsgType::CreateOrder,
+        .order_id = id,
+        .status = OrderStatus::Accepted,
+        .qty = qty,
+        .original_qty = qty,
+    });
     processOrder(id, type, side, qty, price, flag);
 }
 
@@ -142,18 +197,41 @@ void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Dec
 
 template <class Notification>
 void OrderBook<Notification>::putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {
-    notification_.putTrade(mOrderID, tOrderID, mStatus, tStatus, qty, price);
+    notification_.onExecutionReport(ExecutionReport{
+        .exec_type = ExecType::Trade,
+        .maker_order_id = mOrderID,
+        .taker_order_id = tOrderID,
+        .maker_status = mStatus,
+        .taker_status = tStatus,
+        .last_qty = qty,
+        .last_price = price,
+    });
 }
 
 template <class Notification>
 void OrderBook<Notification>::cancelOrder(OrderID id) {
     auto [qty, original_qty] = eraseOrder(id);
     if (qty.is_zero()) {
-        notification_.putOrder(MsgType::CancelOrder, OrderStatus::Rejected, id, uint64_t(0), uint64_t(0), Error::OrderNotExists);
+        notification_.onExecutionReport(ExecutionReport{
+            .exec_type = ExecType::Rejected,
+            .msg_type = MsgType::CancelOrder,
+            .order_id = id,
+            .status = OrderStatus::Rejected,
+            .qty = uint64_t(0),
+            .original_qty = uint64_t(0),
+            .error = Error::OrderNotExists,
+        });
         return;
     }
 
-    notification_.putOrder(MsgType::CancelOrder, OrderStatus::Canceled, id, qty, original_qty);
+    notification_.onExecutionReport(ExecutionReport{
+        .exec_type = ExecType::Canceled,
+        .msg_type = MsgType::CancelOrder,
+        .order_id = id,
+        .status = OrderStatus::Canceled,
+        .qty = qty,
+        .original_qty = original_qty,
+    });
 }
 
 template <class Notification>
