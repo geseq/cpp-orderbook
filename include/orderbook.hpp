@@ -151,12 +151,11 @@ void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal
 
 template <class Notification>
 void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
-    static const auto tradeNotification = [this](OrderID mOrderID, OrderID tOrderID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty,
-                                                 Decimal price) {
+    const auto tradeNotification = [this](OrderID mOrderID, OrderID tOrderID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty, Decimal price) {
         this->putTradeNotification(mOrderID, tOrderID, mOrderStatus, tOrderStatus, qty, price);
         this->last_price = price;
     };
-    static const auto postOrderFill = [this](OrderID id) { this->eraseOrder(id); };
+    const auto postOrderFill = [this](OrderID id) { this->eraseOrder(id); };
 
     if (type == Type::Market) {
         if (side == Side::Buy) {
