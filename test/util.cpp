@@ -28,18 +28,19 @@ struct OrderNotification : public NotificationBase {
     orderbook::OrderStatus status_;
     orderbook::OrderID order_id_;
     orderbook::Decimal qty_;
+    orderbook::Decimal original_qty_;
     std::optional<orderbook::Error> error_;
 
-    OrderNotification(orderbook::MsgType msg_type, orderbook::OrderStatus status, orderbook::OrderID order_id, orderbook::Decimal& qty,
-                      std::optional<orderbook::Error> error)
-        : msg_type_(msg_type), status_(status), order_id_(order_id), qty_(qty), error_(error){};
+    OrderNotification(orderbook::MsgType msg_type, orderbook::OrderStatus status, orderbook::OrderID order_id, const orderbook::Decimal& qty,
+                      const orderbook::Decimal& original_qty, std::optional<orderbook::Error> error)
+        : msg_type_(msg_type), status_(status), order_id_(order_id), qty_(qty), original_qty_(original_qty), error_(error){};
 
     [[nodiscard]] std::string to_string() const override {
         std::ostringstream os;
         if (error_.has_value()) {
-            os << msg_type_ << " " << status_ << " " << order_id_ << " " << qty_ << " Err" << *error_;
+            os << msg_type_ << " " << status_ << " " << order_id_ << " " << qty_ << " " << original_qty_ << " Err" << *error_;
         } else {
-            os << msg_type_ << " " << status_ << " " << order_id_ << " " << qty_;
+            os << msg_type_ << " " << status_ << " " << order_id_ << " " << qty_ << " " << original_qty_;
         }
         return os.str();
     }
@@ -67,13 +68,13 @@ class Notification : public orderbook::NotificationInterface<Notification> {
    public:
     void Reset() { n.clear(); }
 
-    void putOrder(MsgType m, OrderStatus s, OrderID orderID, Decimal qty, orderbook::Error err) {
-        auto notification = std::make_shared<OrderNotification>(m, s, orderID, qty, err);
+    void putOrder(MsgType m, OrderStatus s, OrderID orderID, Decimal qty, Decimal original_qty, orderbook::Error err) {
+        auto notification = std::make_shared<OrderNotification>(m, s, orderID, qty, original_qty, err);
         n.emplace_back(notification);
     }
 
-    void putOrder(MsgType m, OrderStatus s, OrderID orderID, Decimal qty) {
-        auto notification = std::make_shared<OrderNotification>(m, s, orderID, qty, std::optional<orderbook::Error>{});
+    void putOrder(MsgType m, OrderStatus s, OrderID orderID, Decimal qty, Decimal original_qty) {
+        auto notification = std::make_shared<OrderNotification>(m, s, orderID, qty, original_qty, std::optional<orderbook::Error>{});
         n.emplace_back(notification);
     }
 

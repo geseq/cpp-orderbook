@@ -91,13 +91,13 @@ TEST_F(LimitOrderTest, TestLimitOrder_Create) {
     for (int i = 50; i < 100; i += 10) {
         n.Reset();
         processLine(ob, std::to_string(i) + "	L	B	2	" + std::to_string(i) + "	N");
-        n.Verify({"CreateOrder Accepted " + std::to_string(i) + " 2"});
+        n.Verify({"CreateOrder Accepted " + std::to_string(i) + " 2 2"});
     }
 
     for (int i = 100; i < 150; i += 10) {
         n.Reset();
         processLine(ob, std::to_string(i) + "	L	S	2	" + std::to_string(i) + "	N");
-        n.Verify({"CreateOrder Accepted " + std::to_string(i) + " 2"});
+        n.Verify({"CreateOrder Accepted " + std::to_string(i) + " 2 2"});
     }
 
     ASSERT_FALSE(ob->hasOrder(999));
@@ -109,12 +109,12 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateBuy) {
 
     n.Reset();
     processLine(ob, "1100	L	B	1	100	N");
-    n.Verify({"CreateOrder Accepted 1100 1", "6 1100 FilledPartial FilledComplete 1 100"});
+    n.Verify({"CreateOrder Accepted 1100 1 1", "6 1100 FilledPartial FilledComplete 1 100"});
 
     n.Reset();
     processLine(ob, "1150	L	B	10	150	N");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 1150 10", 
+    n.Verify({"CreateOrder Accepted 1150 10 10", 
           "6 1150 FilledComplete FilledPartial 1 100", 
           "7 1150 FilledComplete FilledPartial 2 110",
           "8 1150 FilledComplete FilledPartial 2 120", 
@@ -128,7 +128,7 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateWithZeroQty) {
 
     n.Reset();
     processLine(ob, "170	L	S	0	40	N");
-    n.Verify({"CreateOrder Rejected 170 0 ErrInvalidQty"});
+    n.Verify({"CreateOrder Rejected 170 0 0 ErrInvalidQty"});
 }
 
 TEST_F(LimitOrderTest, TestLimitOrder_CreateWithZeroPrice) {
@@ -136,7 +136,7 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateWithZeroPrice) {
 
     n.Reset();
     processLine(ob, "170	L	S	10	0	N");
-    n.Verify({"CreateOrder Rejected 170 0 ErrInvalidPrice"});
+    n.Verify({"CreateOrder Rejected 170 0 10 ErrInvalidPrice"});
 }
 
 TEST_F(LimitOrderTest, TestLimitOrder_CreateDuplicateOrderID) {
@@ -145,7 +145,7 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateDuplicateOrderID) {
     n.Reset();
     processLine(ob, "170	L	S	10	1000	N");
     processLine(ob, "170	L	S	5	1000	N");
-    n.Verify({"CreateOrder Accepted 170 10", "CreateOrder Rejected 170 0 ErrOrderExists"});
+    n.Verify({"CreateOrder Accepted 170 10 10", "CreateOrder Rejected 170 0 5 ErrOrderExists"});
 }
 
 TEST_F(LimitOrderTest, TestLimitOrder_CreateAndCancel) {
@@ -155,8 +155,22 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateAndCancel) {
     processLine(ob, "170	L	S	10	1000	N");
     ob->cancelOrder(170);
     // clang-format off
-    n.Verify({"CreateOrder Accepted 170 10", 
-            "CancelOrder Canceled 170 10"});
+    n.Verify({"CreateOrder Accepted 170 10 10", 
+            "CancelOrder Canceled 170 10 10"});
+    // clang-format on
+}
+
+TEST_F(LimitOrderTest, TestLimitOrder_PartialFillThenCancel) {
+    addDepth(ob);
+
+    n.Reset();
+    // Buy qty=5 at price=100: fills 2 from best ask (100), leaves 3 resting.
+    processLine(ob, "180	L	B	5	100	N");
+    ob->cancelOrder(180);
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 180 5 5",
+              "6 180 FilledComplete FilledPartial 2 100",
+              "CancelOrder Canceled 180 3 5"});
     // clang-format on
 }
 
@@ -165,7 +179,7 @@ TEST_F(LimitOrderTest, TestLimitOrder_CancelNonExistent) {
 
     n.Reset();
     ob->cancelOrder(170);
-    n.Verify({"CancelOrder Rejected 170 0 ErrOrderNotExists"});
+    n.Verify({"CancelOrder Rejected 170 0 0 ErrOrderNotExists"});
 }
 
 TEST_F(LimitOrderTest, TestLimitOrder_CreateIOCWithNoMatches) {
@@ -173,7 +187,7 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateIOCWithNoMatches) {
 
     n.Reset();
     processLine(ob, "300	L	S	1	200	I");
-    n.Verify({"CreateOrder Accepted 300 1"});
+    n.Verify({"CreateOrder Accepted 300 1 1"});
 }
 
 TEST_F(LimitOrderTest, TestLimitOrder_CreateIoCWithMatches) {
@@ -182,7 +196,7 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateIoCWithMatches) {
     n.Reset();
     processLine(ob, "300	L	S	1	90	I");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 300 1", 
+    n.Verify({"CreateOrder Accepted 300 1 1", 
             "5 300 FilledPartial FilledComplete 1 90"});
     // clang-format on
 }
@@ -195,13 +209,13 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateSell) {
     processLine(ob, "343	L	S	11	1	I");
 
     // clang-format off
-    n.Verify({"CreateOrder Accepted 340 11", 
+    n.Verify({"CreateOrder Accepted 340 11 11", 
               "5 340 FilledComplete FilledPartial 2 90", 
               "4 340 FilledComplete FilledPartial 2 80", 
               "3 340 FilledComplete FilledPartial 2 70", 
               "2 340 FilledComplete FilledPartial 2 60", 
               "1 340 FilledComplete FilledPartial 2 50", 
-              "CreateOrder Accepted 343 11"});
+              "CreateOrder Accepted 343 11 11"});
 
     // clang-format on
 }
@@ -215,8 +229,8 @@ TEST_F(LimitOrderTest, TestLimitOrder_ClearSellBestPriceFirst) {
 
     ASSERT_FALSE(n.hasError());
     // clang-format off
-    n.Verify({"CreateOrder Accepted 900 11", 
-              "CreateOrder Accepted 901 11",
+    n.Verify({"CreateOrder Accepted 900 11 11", 
+              "CreateOrder Accepted 901 11 11",
               "5 901 FilledComplete FilledPartial 2 90",
               "4 901 FilledComplete FilledPartial 2 80",
               "3 901 FilledComplete FilledPartial 2 70",
@@ -237,18 +251,18 @@ TEST_F(LimitOrderTest, TestMarketProcess) {
     processLine(ob, "804	M	B	12	0	N");
 
     // clang-format off
-    n.Verify({"CreateOrder Accepted 800 3",
+    n.Verify({"CreateOrder Accepted 800 3 3",
               "6 800 FilledComplete FilledPartial 2 100",
               "7 800 FilledPartial FilledComplete 1 110",
-              "CreateOrder Rejected 801 0 ErrInvalidQty",
-              "CreateOrder Accepted 802 12",
+              "CreateOrder Rejected 801 0 0 ErrInvalidQty",
+              "CreateOrder Accepted 802 12 12",
               "5 802 FilledComplete FilledPartial 2 90",
               "4 802 FilledComplete FilledPartial 2 80",
               "3 802 FilledComplete FilledPartial 2 70",
               "2 802 FilledComplete FilledPartial 2 60",
               "1 802 FilledComplete FilledPartial 2 50",
-              "CreateOrder Accepted 803 12",
-              "CreateOrder Accepted 804 12",
+              "CreateOrder Accepted 803 12 12",
+              "CreateOrder Accepted 804 12 12",
               "7 804 FilledComplete FilledPartial 1 110",
               "8 804 FilledComplete FilledPartial 2 120",
               "9 804 FilledComplete FilledPartial 2 130",
@@ -261,11 +275,11 @@ TEST_F(LimitOrderTest, TestMarketAoN_UsesCachedSideQtyAfterPartialFill) {
     n.Reset();
 
     processLine(ob, "850	M	B	1	0	N");
-    n.Verify({"CreateOrder Accepted 850 1", "6 850 FilledPartial FilledComplete 1 100"});
+    n.Verify({"CreateOrder Accepted 850 1 1", "6 850 FilledPartial FilledComplete 1 100"});
 
     n.Reset();
     processLine(ob, "851	M	B	10	0	A");
-    n.Verify({"CreateOrder Accepted 851 10"});
+    n.Verify({"CreateOrder Accepted 851 10 10"});
 }
 
 TEST_F(LimitOrderTest, TestMarketProcess_PriceLevel_FIFO) {
@@ -276,7 +290,7 @@ TEST_F(LimitOrderTest, TestMarketProcess_PriceLevel_FIFO) {
     processLine(ob, "801	M	B	6	0	N");
 
     // clang-format off
-        n.Verify({"CreateOrder Accepted 801 6",
+        n.Verify({"CreateOrder Accepted 801 6 6",
                   "6 801 FilledComplete FilledPartial 2 100",
                   "16 801 FilledComplete FilledPartial 2 100",
                   "7 801 FilledComplete FilledComplete 2 110"});
@@ -290,7 +304,7 @@ TEST_F(LimitOrderTest, TestNoMatchingMode_MarketOrderRejected) {
 
     // Market orders are always rejected in no-matching mode
     processLine(ob, "900	M	B	3	0	N");
-    n.Verify({"CreateOrder Rejected 900 3 ErrNoMatching"});
+    n.Verify({"CreateOrder Rejected 900 3 3 ErrNoMatching"});
 }
 
 TEST_F(LimitOrderTest, TestNoMatchingMode_LimitOrderCrossesSpread) {
@@ -300,7 +314,7 @@ TEST_F(LimitOrderTest, TestNoMatchingMode_LimitOrderCrossesSpread) {
 
     // Buy limit that would cross the best ask (100) → rejected
     processLine(ob, "901	L	B	2	100	N");
-    n.Verify({"CreateOrder Rejected 901 2 ErrNoMatching"});
+    n.Verify({"CreateOrder Rejected 901 2 2 ErrNoMatching"});
 }
 
 TEST_F(LimitOrderTest, TestNoMatchingMode_LimitSellOrderCrossesSpread) {
@@ -310,7 +324,7 @@ TEST_F(LimitOrderTest, TestNoMatchingMode_LimitSellOrderCrossesSpread) {
 
     // Sell limit that would cross the best bid (90) → rejected
     processLine(ob, "911	L	S	2	90	N");
-    n.Verify({"CreateOrder Rejected 911 2 ErrNoMatching"});
+    n.Verify({"CreateOrder Rejected 911 2 2 ErrNoMatching"});
 }
 
 TEST_F(LimitOrderTest, TestNoMatchingMode_LimitOrderNoMatch) {
@@ -320,7 +334,7 @@ TEST_F(LimitOrderTest, TestNoMatchingMode_LimitOrderNoMatch) {
 
     // Buy limit well below the best ask → accepted and resting
     processLine(ob, "902	L	B	2	50	N");
-    n.Verify({"CreateOrder Accepted 902 2"});
+    n.Verify({"CreateOrder Accepted 902 2 2"});
 }
 
 TEST_F(LimitOrderTest, TestNoMatchingMode_LimitSellOrderNoMatch) {
@@ -330,7 +344,7 @@ TEST_F(LimitOrderTest, TestNoMatchingMode_LimitSellOrderNoMatch) {
 
     // Sell limit well above the best bid → accepted and resting
     processLine(ob, "912	L	S	2	200	N");
-    n.Verify({"CreateOrder Accepted 912 2"});
+    n.Verify({"CreateOrder Accepted 912 2 2"});
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -345,7 +359,7 @@ TEST_F(LimitOrderTest, TestIoC_LimitSell_ExactMatch) {
     // Sell IoC at 90 for qty 1 – best bid is 90 (qty 2), so a partial maker fill.
     processLine(ob, "300	L	S	1	90	I");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 300 1",
+    n.Verify({"CreateOrder Accepted 300 1 1",
               "5 300 FilledPartial FilledComplete 1 90"});
     // clang-format on
 
@@ -361,7 +375,7 @@ TEST_F(LimitOrderTest, TestIoC_LimitBuy_ExactMatch) {
     // Buy IoC at 100 for qty 1 – best ask is 100 (qty 2).
     processLine(ob, "400	L	B	1	100	I");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 400 1",
+    n.Verify({"CreateOrder Accepted 400 1 1",
               "6 400 FilledPartial FilledComplete 1 100"});
     // clang-format on
     ASSERT_FALSE(ob->hasOrder(400));
@@ -376,7 +390,7 @@ TEST_F(LimitOrderTest, TestIoC_LimitSell_MultiLevel_PartialFill) {
     // Three levels fill; 5 units remain but are cancelled (IoC).
     processLine(ob, "301	L	S	11	70	I");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 301 11",
+    n.Verify({"CreateOrder Accepted 301 11 11",
               "5 301 FilledComplete FilledPartial 2 90",
               "4 301 FilledComplete FilledPartial 2 80",
               "3 301 FilledComplete FilledPartial 2 70"});
@@ -391,7 +405,7 @@ TEST_F(LimitOrderTest, TestIoC_LimitSell_NoMatch) {
 
     // Sell IoC at 200 – all bids are below 200.
     processLine(ob, "302	L	S	1	200	I");
-    n.Verify({"CreateOrder Accepted 302 1"});
+    n.Verify({"CreateOrder Accepted 302 1 1"});
     ASSERT_FALSE(ob->hasOrder(302));
 }
 
@@ -402,7 +416,7 @@ TEST_F(LimitOrderTest, TestIoC_LimitBuy_NoMatch) {
 
     // Buy IoC at 50 – best ask is 100, which is above 50 → no match.
     processLine(ob, "403	L	B	1	50	I");
-    n.Verify({"CreateOrder Accepted 403 1"});
+    n.Verify({"CreateOrder Accepted 403 1 1"});
     ASSERT_FALSE(ob->hasOrder(403));
 }
 
@@ -414,7 +428,7 @@ TEST_F(LimitOrderTest, TestIoC_LimitBuy_MultiLevel_PartialFill) {
     // Buy IoC at 120, qty 11 – asks at 100(2), 110(2), 120(2) = 6 fillable.
     processLine(ob, "404	L	B	11	120	I");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 404 11",
+    n.Verify({"CreateOrder Accepted 404 11 11",
               "6 404 FilledComplete FilledPartial 2 100",
               "7 404 FilledComplete FilledPartial 2 110",
               "8 404 FilledComplete FilledPartial 2 120"});
@@ -434,7 +448,7 @@ TEST_F(LimitOrderTest, TestAoN_LimitSell_CanFill) {
     // Sell AoN at 90 for qty 2 – bid at 90 has exactly qty 2.
     processLine(ob, "500	L	S	2	90	A");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 500 2",
+    n.Verify({"CreateOrder Accepted 500 2 2",
               "5 500 FilledComplete FilledComplete 2 90"});
     // clang-format on
     ASSERT_FALSE(ob->hasOrder(500));
@@ -447,7 +461,7 @@ TEST_F(LimitOrderTest, TestAoN_LimitSell_CannotFill) {
 
     // Sell AoN at 90 for qty 3 – bid at 90 only has qty 2, no other bid >= 90.
     processLine(ob, "501	L	S	3	90	A");
-    n.Verify({"CreateOrder Accepted 501 3"});
+    n.Verify({"CreateOrder Accepted 501 3 3"});
     // AoN that can't fill immediately rests in the book.
     ASSERT_TRUE(ob->hasOrder(501));
 }
@@ -460,7 +474,7 @@ TEST_F(LimitOrderTest, TestAoN_LimitBuy_CanFill) {
     // Buy AoN at 100 for qty 2 – ask at 100 has exactly qty 2.
     processLine(ob, "510	L	B	2	100	A");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 510 2",
+    n.Verify({"CreateOrder Accepted 510 2 2",
               "6 510 FilledComplete FilledComplete 2 100"});
     // clang-format on
     ASSERT_FALSE(ob->hasOrder(510));
@@ -473,7 +487,7 @@ TEST_F(LimitOrderTest, TestAoN_LimitBuy_CannotFill) {
 
     // Buy AoN at 100 for qty 3 – ask at 100 has only qty 2, no other ask <= 100.
     processLine(ob, "511	L	B	3	100	A");
-    n.Verify({"CreateOrder Accepted 511 3"});
+    n.Verify({"CreateOrder Accepted 511 3 3"});
     ASSERT_TRUE(ob->hasOrder(511));
 }
 
@@ -485,7 +499,7 @@ TEST_F(LimitOrderTest, TestAoN_LimitSell_MultiLevel_CanFill) {
     // Sell AoN at 80 for qty 4 – bids: 90(2) + 80(2) = 4 → enough.
     processLine(ob, "502	L	S	4	80	A");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 502 4",
+    n.Verify({"CreateOrder Accepted 502 4 4",
               "5 502 FilledComplete FilledPartial 2 90",
               "4 502 FilledComplete FilledComplete 2 80"});
     // clang-format on
@@ -499,7 +513,7 @@ TEST_F(LimitOrderTest, TestAoN_LimitSell_MultiLevel_CannotFill) {
 
     // Sell AoN at 90 for qty 3 – only 2 at bid 90 (no other bid >= 90) → cannot fill.
     processLine(ob, "503	L	S	3	90	A");
-    n.Verify({"CreateOrder Accepted 503 3"});
+    n.Verify({"CreateOrder Accepted 503 3 3"});
     ASSERT_TRUE(ob->hasOrder(503));
 }
 
@@ -511,7 +525,7 @@ TEST_F(LimitOrderTest, TestAoN_LimitBuy_MultiLevel_CanFill) {
     // Buy AoN at 110 for qty 4 – asks: 100(2) + 110(2) = 4 → enough.
     processLine(ob, "512	L	B	4	110	A");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 512 4",
+    n.Verify({"CreateOrder Accepted 512 4 4",
               "6 512 FilledComplete FilledPartial 2 100",
               "7 512 FilledComplete FilledComplete 2 110"});
     // clang-format on
@@ -525,7 +539,7 @@ TEST_F(LimitOrderTest, TestAoN_LimitBuy_MultiLevel_CannotFill) {
 
     // Buy AoN at 100 for qty 3 – only 2 available at or below 100 → cannot fill.
     processLine(ob, "513	L	B	3	100	A");
-    n.Verify({"CreateOrder Accepted 513 3"});
+    n.Verify({"CreateOrder Accepted 513 3 3"});
     ASSERT_TRUE(ob->hasOrder(513));
 }
 
@@ -541,7 +555,7 @@ TEST_F(LimitOrderTest, TestAoN_MarketSell_CanFill) {
     // 10 bids in the book (5 levels × qty 2). Market sell AoN for qty 6 → can fill.
     processLine(ob, "600	M	S	6	0	A");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 600 6",
+    n.Verify({"CreateOrder Accepted 600 6 6",
               "5 600 FilledComplete FilledPartial 2 90",
               "4 600 FilledComplete FilledPartial 2 80",
               "3 600 FilledComplete FilledComplete 2 70"});
@@ -555,7 +569,7 @@ TEST_F(LimitOrderTest, TestAoN_MarketSell_CannotFill) {
 
     // Total bid volume = 10; requesting 11 → cannot fill.
     processLine(ob, "601	M	S	11	0	A");
-    n.Verify({"CreateOrder Accepted 601 11"});
+    n.Verify({"CreateOrder Accepted 601 11 11"});
 }
 
 // Market buy AoN: enough asks → fully executes.
@@ -566,7 +580,7 @@ TEST_F(LimitOrderTest, TestAoN_MarketBuy_CanFill) {
     // 10 asks in the book. Market buy AoN for qty 4 → fills 100(2) + 110(2).
     processLine(ob, "610	M	B	4	0	A");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 610 4",
+    n.Verify({"CreateOrder Accepted 610 4 4",
               "6 610 FilledComplete FilledPartial 2 100",
               "7 610 FilledComplete FilledComplete 2 110"});
     // clang-format on
@@ -578,7 +592,7 @@ TEST_F(LimitOrderTest, TestAoN_MarketBuy_CannotFill) {
     n.Reset();
 
     processLine(ob, "611	M	B	11	0	A");
-    n.Verify({"CreateOrder Accepted 611 11"});
+    n.Verify({"CreateOrder Accepted 611 11 11"});
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -593,7 +607,7 @@ TEST_F(LimitOrderTest, TestFoK_LimitSell_CanFill) {
     // Sell FoK at 90 for qty 2 – bid at 90 has qty 2.
     processLine(ob, "700	L	S	2	90	F");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 700 2",
+    n.Verify({"CreateOrder Accepted 700 2 2",
               "5 700 FilledComplete FilledComplete 2 90"});
     // clang-format on
     ASSERT_FALSE(ob->hasOrder(700));
@@ -606,7 +620,7 @@ TEST_F(LimitOrderTest, TestFoK_LimitSell_CannotFill) {
 
     // Sell FoK at 90 for qty 3 – only 2 available at >= 90 → kill.
     processLine(ob, "701	L	S	3	90	F");
-    n.Verify({"CreateOrder Accepted 701 3"});
+    n.Verify({"CreateOrder Accepted 701 3 3"});
     // FoK must NOT rest in the book.
     ASSERT_FALSE(ob->hasOrder(701));
 }
@@ -619,7 +633,7 @@ TEST_F(LimitOrderTest, TestFoK_LimitBuy_CanFill) {
     // Buy FoK at 100 for qty 2 – ask at 100 has qty 2.
     processLine(ob, "710	L	B	2	100	F");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 710 2",
+    n.Verify({"CreateOrder Accepted 710 2 2",
               "6 710 FilledComplete FilledComplete 2 100"});
     // clang-format on
     ASSERT_FALSE(ob->hasOrder(710));
@@ -632,7 +646,7 @@ TEST_F(LimitOrderTest, TestFoK_LimitBuy_CannotFill) {
 
     // Buy FoK at 100 for qty 3 – only 2 available at <= 100 → kill.
     processLine(ob, "711	L	B	3	100	F");
-    n.Verify({"CreateOrder Accepted 711 3"});
+    n.Verify({"CreateOrder Accepted 711 3 3"});
     ASSERT_FALSE(ob->hasOrder(711));
 }
 
@@ -644,7 +658,7 @@ TEST_F(LimitOrderTest, TestFoK_LimitSell_MultiLevel_CanFill) {
     // Sell FoK at 70 for qty 6 – bids: 90(2) + 80(2) + 70(2) = 6.
     processLine(ob, "702	L	S	6	70	F");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 702 6",
+    n.Verify({"CreateOrder Accepted 702 6 6",
               "5 702 FilledComplete FilledPartial 2 90",
               "4 702 FilledComplete FilledPartial 2 80",
               "3 702 FilledComplete FilledComplete 2 70"});
@@ -659,7 +673,7 @@ TEST_F(LimitOrderTest, TestFoK_LimitSell_MultiLevel_CannotFill) {
 
     // Sell FoK at 70 for qty 7 – max available at >= 70 is 6 → kill.
     processLine(ob, "703	L	S	7	70	F");
-    n.Verify({"CreateOrder Accepted 703 7"});
+    n.Verify({"CreateOrder Accepted 703 7 7"});
     ASSERT_FALSE(ob->hasOrder(703));
 }
 
@@ -671,7 +685,7 @@ TEST_F(LimitOrderTest, TestFoK_LimitBuy_MultiLevel_CanFill) {
     // Buy FoK at 120 for qty 6 – asks: 100(2) + 110(2) + 120(2) = 6.
     processLine(ob, "712	L	B	6	120	F");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 712 6",
+    n.Verify({"CreateOrder Accepted 712 6 6",
               "6 712 FilledComplete FilledPartial 2 100",
               "7 712 FilledComplete FilledPartial 2 110",
               "8 712 FilledComplete FilledComplete 2 120"});
@@ -686,7 +700,7 @@ TEST_F(LimitOrderTest, TestFoK_LimitBuy_MultiLevel_CannotFill) {
 
     // Buy FoK at 120 for qty 7 – max available at <= 120 is 6 → kill.
     processLine(ob, "713	L	B	7	120	F");
-    n.Verify({"CreateOrder Accepted 713 7"});
+    n.Verify({"CreateOrder Accepted 713 7 7"});
     ASSERT_FALSE(ob->hasOrder(713));
 }
 
@@ -701,7 +715,7 @@ TEST_F(LimitOrderTest, TestFoK_MarketSell_CanFill) {
 
     processLine(ob, "800	M	S	4	0	F");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 800 4",
+    n.Verify({"CreateOrder Accepted 800 4 4",
               "5 800 FilledComplete FilledPartial 2 90",
               "4 800 FilledComplete FilledComplete 2 80"});
     // clang-format on
@@ -713,7 +727,7 @@ TEST_F(LimitOrderTest, TestFoK_MarketSell_CannotFill) {
     n.Reset();
 
     processLine(ob, "801	M	S	11	0	F");
-    n.Verify({"CreateOrder Accepted 801 11"});
+    n.Verify({"CreateOrder Accepted 801 11 11"});
 }
 
 // Market buy FoK: enough asks → fully executes.
@@ -723,7 +737,7 @@ TEST_F(LimitOrderTest, TestFoK_MarketBuy_CanFill) {
 
     processLine(ob, "810	M	B	4	0	F");
     // clang-format off
-    n.Verify({"CreateOrder Accepted 810 4",
+    n.Verify({"CreateOrder Accepted 810 4 4",
               "6 810 FilledComplete FilledPartial 2 100",
               "7 810 FilledComplete FilledComplete 2 110"});
     // clang-format on
@@ -735,7 +749,7 @@ TEST_F(LimitOrderTest, TestFoK_MarketBuy_CannotFill) {
     n.Reset();
 
     processLine(ob, "811	M	B	11	0	F");
-    n.Verify({"CreateOrder Accepted 811 11"});
+    n.Verify({"CreateOrder Accepted 811 11 11"});
 }
 
 int main(int argc, char** argv) {
