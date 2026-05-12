@@ -64,6 +64,8 @@ std::ostream& operator<<(std::ostream& os, const Error& error) {
             return os << "InvalidQty";
         case Error::InvalidPrice:
             return os << "InvalidPrice";
+        case Error::InvalidSeqNum:
+            return os << "InvalidSeqNum";
         case Error::OrderID:
             return os << "OrderID";
         case Error::OrderExists:

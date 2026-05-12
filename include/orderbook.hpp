@@ -67,7 +67,7 @@ void OrderBook<Notification>::addOrder(OrderID id, SeqNum seq, Type type, Side s
             .status = OrderStatus::Rejected,
             .qty = uint64_t(0),
             .original_qty = qty,
-            .error = Error::OrderID,
+            .error = Error::InvalidSeqNum,
         });
         return;
     }

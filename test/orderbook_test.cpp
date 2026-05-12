@@ -148,14 +148,14 @@ TEST_F(LimitOrderTest, TestSeqNum_RejectsSameSeq) {
     // Force two orders through with the same seq by calling addOrder directly.
     ob->addOrder(1, 1, Type::Limit, Side::Buy, Decimal("1"), Decimal("50"), Flag::None);
     ob->addOrder(2, 1, Type::Limit, Side::Buy, Decimal("1"), Decimal("50"), Flag::None);
-    n.Verify({"CreateOrder Accepted 1 1 1", "CreateOrder Rejected 2 0 1 ErrOrderID"});
+    n.Verify({"CreateOrder Accepted 1 1 1", "CreateOrder Rejected 2 0 1 ErrInvalidSeqNum"});
 }
 
 TEST_F(LimitOrderTest, TestSeqNum_RejectsLowerSeq) {
     n.Reset();
     ob->addOrder(1, 5, Type::Limit, Side::Buy, Decimal("1"), Decimal("50"), Flag::None);
     ob->addOrder(2, 3, Type::Limit, Side::Buy, Decimal("1"), Decimal("50"), Flag::None);
-    n.Verify({"CreateOrder Accepted 1 1 1", "CreateOrder Rejected 2 0 1 ErrOrderID"});
+    n.Verify({"CreateOrder Accepted 1 1 1", "CreateOrder Rejected 2 0 1 ErrInvalidSeqNum"});
 }
 
 TEST_F(LimitOrderTest, TestSeqNum_MarketOrderAlsoEnforced) {
@@ -164,7 +164,7 @@ TEST_F(LimitOrderTest, TestSeqNum_MarketOrderAlsoEnforced) {
     n.Reset();
     ob->addOrder(1, 5, Type::Market, Side::Buy, Decimal("1"), Decimal("0"), Flag::None);
     ob->addOrder(2, 5, Type::Market, Side::Buy, Decimal("1"), Decimal("0"), Flag::None);
-    n.Verify({"CreateOrder Accepted 1 1 1", "CreateOrder Rejected 2 0 1 ErrOrderID"});
+    n.Verify({"CreateOrder Accepted 1 1 1", "CreateOrder Rejected 2 0 1 ErrInvalidSeqNum"});
 }
 
 TEST_F(LimitOrderTest, TestSeqNum_ReuseOrderIDWithDifferentSeq) {

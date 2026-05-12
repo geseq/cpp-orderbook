@@ -54,6 +54,7 @@ std::ostream& operator<<(std::ostream& os, const PriceType& priceType);
 enum class Error : uint16_t {
     InvalidQty,
     InvalidPrice,
+    InvalidSeqNum,
     OrderID,
     OrderExists,
     OrderNotExists,
