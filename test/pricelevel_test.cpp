@@ -18,8 +18,8 @@ class PriceLevelTest : public ::testing::Test {
 TEST_F(PriceLevelTest, TestPriceLevel) {
     PriceLevel<PriceType::Bid> bidLevel(10);
 
-    auto o1 = std::make_shared<Order>(1, Type::Limit, Side::Buy, Decimal(10, 0), Decimal(10, 0), Flag::None);
-    auto o2 = std::make_shared<Order>(2, Type::Limit, Side::Buy, Decimal(10, 0), Decimal(20, 0), Flag::None);
+    auto o1 = std::make_shared<Order>(1, 0, Type::Limit, Side::Buy, Decimal(10, 0), Decimal(10, 0), Flag::None);
+    auto o2 = std::make_shared<Order>(2, 0, Type::Limit, Side::Buy, Decimal(10, 0), Decimal(20, 0), Flag::None);
 
     auto& tree = bidLevel.price_tree();
 
@@ -68,14 +68,14 @@ TEST_F(PriceLevelTest, TestPriceLevel) {
 TEST_F(PriceLevelTest, TestPriceFinding) {
     PriceLevel<PriceType::Ask> askLevel(10);
 
-    askLevel.append(new Order(1, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(130, 0), Flag::None));
-    askLevel.append(new Order(2, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(170, 0), Flag::None));
-    askLevel.append(new Order(3, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(100, 0), Flag::None));
-    askLevel.append(new Order(4, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(160, 0), Flag::None));
-    askLevel.append(new Order(5, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(140, 0), Flag::None));
-    askLevel.append(new Order(6, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(120, 0), Flag::None));
-    askLevel.append(new Order(7, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(150, 0), Flag::None));
-    askLevel.append(new Order(8, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(110, 0), Flag::None));
+    askLevel.append(new Order(1, 0, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(130, 0), Flag::None));
+    askLevel.append(new Order(2, 0, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(170, 0), Flag::None));
+    askLevel.append(new Order(3, 0, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(100, 0), Flag::None));
+    askLevel.append(new Order(4, 0, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(160, 0), Flag::None));
+    askLevel.append(new Order(5, 0, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(140, 0), Flag::None));
+    askLevel.append(new Order(6, 0, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(120, 0), Flag::None));
+    askLevel.append(new Order(7, 0, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(150, 0), Flag::None));
+    askLevel.append(new Order(8, 0, Type::Limit, Side::Sell, Decimal(5, 0), Decimal(110, 0), Flag::None));
 
     ASSERT_EQ(askLevel.volume(), Decimal(40, 0));
 

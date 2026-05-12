@@ -56,10 +56,10 @@ class Notification : public orderbook::NotificationInterface<Notification> {
     static std::string to_string(const orderbook::ExecutionReport& r) {
         std::ostringstream os;
         if (r.exec_type == orderbook::ExecType::Trade) {
-            os << r.maker_order_id << " " << r.taker_order_id << " " << r.maker_status << " " << r.taker_status << " " << r.last_qty.to_string() << " "
+            os << r.maker_ref_order_id << " " << r.taker_ref_order_id << " " << r.maker_status << " " << r.taker_status << " " << r.last_qty.to_string() << " "
                << r.last_price.to_string();
         } else {
-            os << r.msg_type << " " << r.status << " " << r.order_id << " " << r.qty << " " << r.original_qty;
+            os << r.msg_type << " " << r.status << " " << r.ref_order_id << " " << r.qty << " " << r.original_qty;
             if (r.error.has_value()) {
                 os << " Err" << *r.error;
             }

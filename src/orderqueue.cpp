@@ -42,10 +42,10 @@ Decimal OrderQueue::process(const TradeNotification& tradeNotification, const Po
             qtyProcessed += qty;
             ho->qty -= qty;
             total_qty_ -= qty;
-            tradeNotification(ho->id, takerOrderID, OrderStatus::FilledPartial, OrderStatus::FilledComplete, qty, ho->price);
+            tradeNotification(ho->ref_id, takerOrderID, OrderStatus::FilledPartial, OrderStatus::FilledComplete, qty, ho->price);
             break;
         } else {
-            const auto makerOrderID = ho->id;
+            const auto makerOrderID = ho->ref_id;
             const auto makerPrice = ho->price;
             auto matchedQty = ho->qty;
             qtyProcessed += matchedQty;

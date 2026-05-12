@@ -17,8 +17,8 @@ TEST_F(OrderQueueTest, TestOrderQueue) {
     Decimal price(100, 0);
     auto oq = std::make_unique<OrderQueue>(price);
 
-    auto o1 = Order(1, Type::Limit, Side::Buy, Decimal(100, 0), Decimal(100, 0), Flag::None);
-    auto o2 = Order(2, Type::Limit, Side::Buy, Decimal(100, 0), Decimal(100, 0), Flag::None);
+    auto o1 = Order(1, 0, Type::Limit, Side::Buy, Decimal(100, 0), Decimal(100, 0), Flag::None);
+    auto o2 = Order(2, 0, Type::Limit, Side::Buy, Decimal(100, 0), Decimal(100, 0), Flag::None);
 
     oq->append(&o1);
     oq->append(&o2);
@@ -48,8 +48,8 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessUpdatesTotalQtyOnFullFill) {
     Decimal price(100, 0);
     auto oq = std::make_unique<OrderQueue>(price);
 
-    auto o1 = Order(1, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
-    auto o2 = Order(2, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
+    auto o1 = Order(1, 0, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
+    auto o2 = Order(2, 0, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
 
     oq->append(&o1);
     oq->append(&o2);
@@ -78,8 +78,8 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessUpdatesTotalQtyOnExactFill) {
     Decimal price(100, 0);
     auto oq = std::make_unique<OrderQueue>(price);
 
-    auto o1 = Order(1, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
-    auto o2 = Order(2, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
+    auto o1 = Order(1, 0, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
+    auto o2 = Order(2, 0, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
 
     oq->append(&o1);
     oq->append(&o2);
@@ -105,8 +105,8 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessZeroesFilledOrderBeforePostFill) {
     Decimal price(100, 0);
     auto oq = std::make_unique<OrderQueue>(price);
 
-    auto o1 = Order(1, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
-    auto o2 = Order(2, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
+    auto o1 = Order(1, 0, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
+    auto o2 = Order(2, 0, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
 
     oq->append(&o1);
     oq->append(&o2);
@@ -138,8 +138,8 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessUsesSnapshotForTradeNotificationAft
     Decimal price(100, 0);
     auto oq = std::make_unique<OrderQueue>(price);
 
-    auto o1 = Order(1, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
-    auto o2 = Order(2, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
+    auto o1 = Order(1, 0, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
+    auto o2 = Order(2, 0, Type::Limit, Side::Buy, Decimal(100, 0), price, Flag::None);
 
     oq->append(&o1);
     oq->append(&o2);
@@ -154,7 +154,7 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessUsesSnapshotForTradeNotificationAft
     const PostOrderFill pf = [&oq, &o1](OrderID id) {
         if (id == 1) {
             oq->remove(&o1);
-            o1.id = 999;
+            o1.ref_id = 999;
             o1.price = Decimal(999, 0);
         }
     };

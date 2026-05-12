@@ -11,6 +11,7 @@ namespace orderbook {
 
 using Decimal = decimal::U8;
 using OrderID = uint64_t;
+using BookOrderID = uint64_t;
 using SeqNum = uint64_t;
 
 enum class Type : uint8_t {
@@ -88,14 +89,14 @@ struct ExecutionReport {
 
     // Order event fields (New, Rejected, Canceled)
     MsgType msg_type{};
-    OrderID order_id{};
+    OrderID ref_order_id{};
     OrderStatus status{};
     Decimal qty{};
     Decimal original_qty{};
 
     // Trade event fields
-    OrderID maker_order_id{};
-    OrderID taker_order_id{};
+    OrderID maker_ref_order_id{};
+    OrderID taker_ref_order_id{};
     OrderStatus maker_status{};
     OrderStatus taker_status{};
     Decimal last_qty{};

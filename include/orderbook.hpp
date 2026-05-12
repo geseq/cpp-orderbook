@@ -51,6 +51,10 @@ class OrderBook {
     // the orderbook merely validates that property at the boundary.
     SeqNum last_seq_ = 0;
 
+    // next_book_id_ is the engine's internal order counter.  It is incremented
+    // each time a resting order is created and stored as Order::book_id.
+    BookOrderID next_book_id_ = 0;
+
     std::pair<Decimal, Decimal> eraseOrder(OrderID id);
     void processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
 };
@@ -63,7 +67,7 @@ void OrderBook<Notification>::addOrder(OrderID id, SeqNum seq, Type type, Side s
         notification_.onExecutionReport(ExecutionReport{
             .exec_type = ExecType::Rejected,
             .msg_type = MsgType::CreateOrder,
-            .order_id = id,
+            .ref_order_id = id,
             .status = OrderStatus::Rejected,
             .qty = uint64_t(0),
             .original_qty = qty,
@@ -77,7 +81,7 @@ void OrderBook<Notification>::addOrder(OrderID id, SeqNum seq, Type type, Side s
         notification_.onExecutionReport(ExecutionReport{
             .exec_type = ExecType::Rejected,
             .msg_type = MsgType::CreateOrder,
-            .order_id = id,
+            .ref_order_id = id,
             .status = OrderStatus::Rejected,
             .qty = qty,
             .original_qty = qty,
@@ -91,7 +95,7 @@ void OrderBook<Notification>::addOrder(OrderID id, SeqNum seq, Type type, Side s
             notification_.onExecutionReport(ExecutionReport{
                 .exec_type = ExecType::Rejected,
                 .msg_type = MsgType::CreateOrder,
-                .order_id = id,
+                .ref_order_id = id,
                 .status = OrderStatus::Rejected,
                 .qty = qty,
                 .original_qty = qty,
@@ -106,7 +110,7 @@ void OrderBook<Notification>::addOrder(OrderID id, SeqNum seq, Type type, Side s
                 notification_.onExecutionReport(ExecutionReport{
                     .exec_type = ExecType::Rejected,
                     .msg_type = MsgType::CreateOrder,
-                    .order_id = id,
+                    .ref_order_id = id,
                     .status = OrderStatus::Rejected,
                     .qty = qty,
                     .original_qty = qty,
@@ -120,7 +124,7 @@ void OrderBook<Notification>::addOrder(OrderID id, SeqNum seq, Type type, Side s
                 notification_.onExecutionReport(ExecutionReport{
                     .exec_type = ExecType::Rejected,
                     .msg_type = MsgType::CreateOrder,
-                    .order_id = id,
+                    .ref_order_id = id,
                     .status = OrderStatus::Rejected,
                     .qty = qty,
                     .original_qty = qty,
@@ -136,7 +140,7 @@ void OrderBook<Notification>::addOrder(OrderID id, SeqNum seq, Type type, Side s
             notification_.onExecutionReport(ExecutionReport{
                 .exec_type = ExecType::Rejected,
                 .msg_type = MsgType::CreateOrder,
-                .order_id = id,
+                .ref_order_id = id,
                 .status = OrderStatus::Rejected,
                 .qty = uint64_t(0),
                 .original_qty = qty,
@@ -149,7 +153,7 @@ void OrderBook<Notification>::addOrder(OrderID id, SeqNum seq, Type type, Side s
             notification_.onExecutionReport(ExecutionReport{
                 .exec_type = ExecType::Rejected,
                 .msg_type = MsgType::CreateOrder,
-                .order_id = id,
+                .ref_order_id = id,
                 .status = OrderStatus::Rejected,
                 .qty = uint64_t(0),
                 .original_qty = qty,
@@ -162,7 +166,7 @@ void OrderBook<Notification>::addOrder(OrderID id, SeqNum seq, Type type, Side s
     notification_.onExecutionReport(ExecutionReport{
         .exec_type = ExecType::New,
         .msg_type = MsgType::CreateOrder,
-        .order_id = id,
+        .ref_order_id = id,
         .status = OrderStatus::Accepted,
         .qty = qty,
         .original_qty = qty,
@@ -201,7 +205,7 @@ void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Dec
 
     auto qtyLeft = qty - qtyProcessed;
     if (qtyLeft > uint64_t(0)) {
-        auto* o = order_pool_.acquire(id, type, side, qtyLeft, price, flag);
+        auto* o = order_pool_.acquire(id, ++next_book_id_, type, side, qtyLeft, price, flag);
         o->original_qty = qty;
         if (side == Side::Buy) {
             bids_.append(o);
@@ -219,8 +223,8 @@ template <class Notification>
 void OrderBook<Notification>::putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {
     notification_.onExecutionReport(ExecutionReport{
         .exec_type = ExecType::Trade,
-        .maker_order_id = mOrderID,
-        .taker_order_id = tOrderID,
+        .maker_ref_order_id = mOrderID,
+        .taker_ref_order_id = tOrderID,
         .maker_status = mStatus,
         .taker_status = tStatus,
         .last_qty = qty,
@@ -235,7 +239,7 @@ void OrderBook<Notification>::cancelOrder(OrderID id) {
         notification_.onExecutionReport(ExecutionReport{
             .exec_type = ExecType::Rejected,
             .msg_type = MsgType::CancelOrder,
-            .order_id = id,
+            .ref_order_id = id,
             .status = OrderStatus::Rejected,
             .qty = uint64_t(0),
             .original_qty = uint64_t(0),
@@ -247,7 +251,7 @@ void OrderBook<Notification>::cancelOrder(OrderID id) {
     notification_.onExecutionReport(ExecutionReport{
         .exec_type = ExecType::Canceled,
         .msg_type = MsgType::CancelOrder,
-        .order_id = id,
+        .ref_order_id = id,
         .status = OrderStatus::Canceled,
         .qty = qty,
         .original_qty = original_qty,
