@@ -17,7 +17,6 @@ class LimitOrderTest : public ::testing::Test {
     void SetUp() override {
         n = Notification();
         ob = std::make_shared<orderbook::OrderBook<Notification>>(n);
-        next_seq_ = 0;
     }
 
     void TearDown() override {}

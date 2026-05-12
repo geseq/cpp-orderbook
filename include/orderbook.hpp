@@ -55,6 +55,8 @@ class OrderBook {
 template <class Notification>
 void OrderBook<Notification>::addOrder(OrderID id, SeqNum seq, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
     if (seq <= last_seq_) [[unlikely]] {
+        // Sequence numbers must be strictly increasing to prevent duplicate
+        // or out-of-order order submissions across all order types.
         notification_.onExecutionReport(ExecutionReport{
             .exec_type = ExecType::Rejected,
             .msg_type = MsgType::CreateOrder,
