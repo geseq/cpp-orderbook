@@ -17,6 +17,7 @@ Decimal OrderQueue::totalQty() const { return total_qty_; }
 uint64_t OrderQueue::len() { return orders_.size(); }
 
 void OrderQueue::append(Order* order) {
+    order->queue_time = std::chrono::steady_clock::now();
     total_qty_ += order->qty;
     orders_.push_back(*order);
 }

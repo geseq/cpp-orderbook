@@ -176,6 +176,23 @@ TEST_F(LimitOrderTest, TestSeqNum_ReuseOrderIDWithDifferentSeq) {
     n.Verify({"CreateOrder Accepted 42 1 1", "CancelOrder Canceled 42 1 1", "CreateOrder Accepted 42 1 1"});
 }
 
+TEST_F(LimitOrderTest, TestTimePriority_ByArrivalOrderNotByOrderID) {
+    // Submit two resting sell orders at the same price.  The one with the
+    // higher numeric ID arrives first.  Real-world price-time priority must
+    // fill it first regardless of ID value; if the engine used the order ID
+    // as the time key a client with a lower ID could jump the queue.
+    ob->addOrder(100, 1, Type::Limit, Side::Sell, Decimal("1"), Decimal("100"), Flag::None);
+    ob->addOrder(1,   2, Type::Limit, Side::Sell, Decimal("1"), Decimal("100"), Flag::None);
+
+    n.Reset();
+    ob->addOrder(200, 3, Type::Market, Side::Buy, Decimal("2"), Decimal("0"), Flag::None);
+    // Order 100 (submitted first, queue_time earlier) must be the maker for the first fill.
+    n.Verify({
+        "CreateOrder Accepted 200 2 2",
+        "100 200 FilledComplete FilledPartial 1 100",
+        "1 200 FilledComplete FilledComplete 1 100",
+    });
+}
 
 TEST_F(LimitOrderTest, TestLimitOrder_CreateDuplicateOrderID) {
     addDepth(ob);

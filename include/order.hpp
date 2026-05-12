@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 
@@ -21,6 +22,14 @@ struct Order : public set_base_hook<optimize_size<false>>, list_base_hook<consta
     Type type;
     Flag flag;
     Side side;
+
+    // Stamped by the engine the moment this order (or re-slice) enters the
+    // price-level queue.  This is the authoritative time-priority key: callers
+    // never supply it, so no client can manipulate queue position.  For iceberg
+    // orders each new visible slice receives a fresh queue_time when it is
+    // re-appended, correctly placing it behind all orders already resting at
+    // that price level.
+    std::chrono::steady_clock::time_point queue_time{};
 
     OrderQueue *queue = nullptr;
 

@@ -46,6 +46,9 @@ class OrderBook {
 
     bool matching_ = true;
 
+    // last_seq_ enforces that callers supply strictly-increasing sequence
+    // numbers.  Assigning monotonic seq values is the gateway's responsibility;
+    // the orderbook merely validates that property at the boundary.
     SeqNum last_seq_ = 0;
 
     std::pair<Decimal, Decimal> eraseOrder(OrderID id);
@@ -55,8 +58,8 @@ class OrderBook {
 template <class Notification>
 void OrderBook<Notification>::addOrder(OrderID id, SeqNum seq, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
     if (seq <= last_seq_) [[unlikely]] {
-        // Sequence numbers must be strictly increasing to prevent duplicate
-        // or out-of-order order submissions across all order types.
+        // Sequence numbers must be strictly increasing.  Assigning them is the
+        // gateway's responsibility; the orderbook validates the property here.
         notification_.onExecutionReport(ExecutionReport{
             .exec_type = ExecType::Rejected,
             .msg_type = MsgType::CreateOrder,
