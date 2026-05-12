@@ -29,6 +29,20 @@ void OrderQueue::remove(Order* o) {
     }
 }
 
+Decimal OrderQueue::availableQty(UserID takerUserID) const {
+    // When STP is disabled (takerUserID == 0) all orders are eligible; skip the per-order scan.
+    if (takerUserID == 0) {
+        return total_qty_;
+    }
+    Decimal avail{};
+    for (const auto& o : orders_) {
+        if (o.user_id != takerUserID) {
+            avail += o.qty;
+        }
+    }
+    return avail;
+}
+
 Decimal OrderQueue::process(const TradeNotification& tradeNotification, const PostOrderFill& postFill, OrderID takerOrderID, UserID takerUserID, Decimal qty) {
     Decimal qtyProcessed = {};
     BOOST_ASSERT(orders_.begin() != orders_.end());

@@ -838,6 +838,99 @@ TEST_F(LimitOrderTest, TestSTP_LimitBuy_AllSelfTrade_TakerRests) {
     ASSERT_TRUE(ob->hasOrder(942));
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// STP + AoN/FoK: pre-check must be STP-aware (exclude same-user qty)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// AoN market sell: only self-liquidity exists – STP-aware pre-check must reject,
+// no trades, maker order survives.
+TEST_F(LimitOrderTest, TestSTP_AoN_MarketSell_SelfLiquidityOnly_NoFill) {
+    processLine(ob, "1000\tL\tB\t2\t90\tN\t1");
+    n.Reset();
+
+    // User 1 market AoN sell qty=2; all bids belong to user 1 → must not fill.
+    processLine(ob, "1001\tM\tS\t2\t0\tA\t1");
+    n.Verify({"CreateOrder Accepted 1001 2 2"});
+    ASSERT_TRUE(ob->hasOrder(1000));
+}
+
+// AoN market buy: only self-liquidity exists – must not fill.
+TEST_F(LimitOrderTest, TestSTP_AoN_MarketBuy_SelfLiquidityOnly_NoFill) {
+    processLine(ob, "1010\tL\tS\t2\t100\tN\t1");
+    n.Reset();
+
+    processLine(ob, "1011\tM\tB\t2\t0\tA\t1");
+    n.Verify({"CreateOrder Accepted 1011 2 2"});
+    ASSERT_TRUE(ob->hasOrder(1010));
+}
+
+// AoN limit buy: only matching ask is own order – STP-aware pre-check must reject;
+// taker rests (AoN limit rests when it cannot fill), maker not consumed.
+TEST_F(LimitOrderTest, TestSTP_AoN_LimitBuy_SelfLiquidityOnly_TakerRests) {
+    processLine(ob, "1020\tL\tS\t2\t100\tN\t1");
+    n.Reset();
+
+    processLine(ob, "1021\tL\tB\t2\t100\tA\t1");
+    n.Verify({"CreateOrder Accepted 1021 2 2"});
+    ASSERT_TRUE(ob->hasOrder(1021));
+    ASSERT_TRUE(ob->hasOrder(1020));
+}
+
+// FoK limit buy: only self-liquidity at the limit – must be killed (FoK never rests).
+TEST_F(LimitOrderTest, TestSTP_FoK_LimitBuy_SelfLiquidityOnly_Killed) {
+    processLine(ob, "1030\tL\tS\t2\t100\tN\t1");
+    n.Reset();
+
+    processLine(ob, "1031\tL\tB\t2\t100\tF\t1");
+    n.Verify({"CreateOrder Accepted 1031 2 2"});
+    ASSERT_FALSE(ob->hasOrder(1031));
+    ASSERT_TRUE(ob->hasOrder(1030));
+}
+
+// AoN market buy: non-self ask volume is insufficient (naive check passes: total=self+other >= qty,
+// but non-self alone < qty). Without the fix this partially fills from the non-self side.
+TEST_F(LimitOrderTest, TestSTP_AoN_MarketBuy_PartialSelfLiquidity_NoFill) {
+    processLine(ob, "1050\tL\tS\t1\t100\tN\t1");  // user 1, qty=1 at 100 (self)
+    processLine(ob, "1051\tL\tS\t1\t110\tN\t2");  // user 2, qty=1 at 110 (non-self)
+    n.Reset();
+
+    // User 1 AoN buy qty=2: total=2 passes naive check, but non-self=1 < 2 → must not fill.
+    processLine(ob, "1052\tM\tB\t2\t0\tA\t1");
+    n.Verify({"CreateOrder Accepted 1052 2 2"});
+    ASSERT_TRUE(ob->hasOrder(1050));
+    ASSERT_TRUE(ob->hasOrder(1051));
+}
+
+// AoN limit buy: self-order and other-order sit at the same price level; non-self qty < requested.
+// Without the fix the AoN pre-check uses totalQty (self+other) and passes, then partially fills.
+TEST_F(LimitOrderTest, TestSTP_AoN_LimitBuy_PartialSelfLiquidity_NoFill) {
+    processLine(ob, "1060\tL\tS\t2\t100\tN\t1");  // user 1, qty=2 at 100 (self)
+    processLine(ob, "1061\tL\tS\t1\t100\tN\t2");  // user 2, qty=1 at 100 (non-self)
+    n.Reset();
+
+    // User 1 AoN buy qty=3 at 100: totalQty=3 satisfies pre-check, but non-self=1 < 3 → must not fill.
+    processLine(ob, "1062\tL\tB\t3\t100\tA\t1");
+    n.Verify({"CreateOrder Accepted 1062 3 3"});
+    ASSERT_TRUE(ob->hasOrder(1062));  // AoN rests when it cannot fill
+    ASSERT_TRUE(ob->hasOrder(1060));
+    ASSERT_TRUE(ob->hasOrder(1061));
+}
+
+// FoK limit buy: same-price level has self + non-self; non-self qty < requested.
+// Without the fix the FoK pre-check passes then partially executes before being killed.
+TEST_F(LimitOrderTest, TestSTP_FoK_LimitBuy_PartialSelfLiquidity_Killed) {
+    processLine(ob, "1070\tL\tS\t2\t100\tN\t1");  // user 1, qty=2 at 100 (self)
+    processLine(ob, "1071\tL\tS\t1\t100\tN\t2");  // user 2, qty=1 at 100 (non-self)
+    n.Reset();
+
+    // User 1 FoK buy qty=3 at 100: non-self=1 < 3 → must be killed with no trades.
+    processLine(ob, "1072\tL\tB\t3\t100\tF\t1");
+    n.Verify({"CreateOrder Accepted 1072 3 3"});
+    ASSERT_FALSE(ob->hasOrder(1072));  // FoK killed
+    ASSERT_TRUE(ob->hasOrder(1070));
+    ASSERT_TRUE(ob->hasOrder(1071));
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

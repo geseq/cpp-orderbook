@@ -76,9 +76,16 @@ template <PriceType Q>
 Decimal PriceLevel<P>::processMarketOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, UserID takerUserID, Decimal qty, Flag flag) {
     static_assert(Q == PriceType::Bid || Q == PriceType::Ask, "Unsupported PriceType");
 
-    if ((flag & (AoN | FoK)) != 0 && qty > volume_) {
-        // AoN/FoK must match the full requested quantity; return zero processed when aggregate volume is insufficient.
-        return Decimal{};
+    if ((flag & (AoN | FoK)) != 0) {
+        // AoN/FoK must match the full requested quantity; exclude same-user (STP-skipped)
+        // quantity so self-liquidity cannot cause the pre-check to falsely pass.
+        Decimal availableVolume{};
+        for (auto it = price_tree_.begin(); it != price_tree_.end(); ++it) {
+            availableVolume += it->availableQty(takerUserID);
+        }
+        if (qty > availableVolume) {
+            return Decimal{};
+        }
     }
 
     auto qtyLeft = qty;
@@ -120,8 +127,8 @@ Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const Post
         }
     }
 
-    // AoN/FoK pre-check: only continue when aggregate fillable volume exists at eligible price levels.
-    // Matched quantity is accounted for incrementally via volume_ -= result in the execution loop below.
+    // AoN/FoK pre-check: only continue when aggregate STP-aware fillable volume exists at eligible price levels.
+    // Use availableQty (excludes same-user orders) so that self-liquidity cannot cause a false pass.
     if (flag & (AoN | FoK)) {
         if (qty > volume()) {
             return Decimal{};
@@ -132,20 +139,22 @@ Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const Post
         if constexpr (std::is_same_v<CompareType, CmpGreater>) {
             // Bid tree is descending (best = highest). Accumulate from bids >= sell limit.
             for (auto it = price_tree_.begin(); it != price_tree_.end() && it->price() >= price; ++it) {
-                if (aQty <= it->totalQty()) {
+                auto avail = it->availableQty(takerUserID);
+                if (aQty <= avail) {
                     canFill = true;
                     break;
                 }
-                aQty -= it->totalQty();
+                aQty -= avail;
             }
         } else {
             // Ask tree is ascending (best = lowest). Accumulate from asks <= buy limit.
             for (auto it = price_tree_.begin(); it != price_tree_.end() && it->price() <= price; ++it) {
-                if (aQty <= it->totalQty()) {
+                auto avail = it->availableQty(takerUserID);
+                if (aQty <= avail) {
                     canFill = true;
                     break;
                 }
-                aQty -= it->totalQty();
+                aQty -= avail;
             }
         }
 

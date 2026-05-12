@@ -29,6 +29,7 @@ class OrderQueue : public boost::intrusive::set_base_hook<boost::intrusive::opti
     void append(Order *o);
     void remove(Order *o);
     Decimal process(const TradeNotification &tn, const PostOrderFill &postFill, OrderID takerOrderID, UserID takerUserID, Decimal qty);
+    [[nodiscard]] Decimal availableQty(UserID takerUserID) const;
     [[nodiscard]] const OrderList &order_list() const { return orders_; }
 
     friend bool operator<(const OrderQueue &a, const OrderQueue &b) { return a.price_ < b.price_; }
