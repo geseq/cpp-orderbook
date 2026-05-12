@@ -29,7 +29,21 @@ void OrderQueue::remove(Order* o) {
     }
 }
 
-Decimal OrderQueue::process(const TradeNotification& tradeNotification, const PostOrderFill& postFill, OrderID takerOrderID, Decimal qty) {
+Decimal OrderQueue::availableQty(UserID takerUserID) const {
+    // When STP is disabled (takerUserID == 0) all orders are eligible; skip the per-order scan.
+    if (takerUserID == 0) {
+        return total_qty_;
+    }
+    Decimal avail{};
+    for (const auto& o : orders_) {
+        if (o.user_id != takerUserID) {
+            avail += o.qty;
+        }
+    }
+    return avail;
+}
+
+Decimal OrderQueue::process(const TradeNotification& tradeNotification, const PostOrderFill& postFill, OrderID takerOrderID, UserID takerUserID, Decimal qty) {
     Decimal qtyProcessed = {};
     BOOST_ASSERT(orders_.begin() != orders_.end());
     for (auto it = orders_.begin(); it != orders_.end() && qty > uint64_t(0);) {
@@ -37,14 +51,19 @@ Decimal OrderQueue::process(const TradeNotification& tradeNotification, const Po
         BOOST_ASSERT(orders_.begin() != orders_.end());
         auto* ho = &*it;
         BOOST_ASSERT(ho != nullptr);
+        if (takerUserID != 0 && ho->user_id == takerUserID) {
+            ++it;
+            continue;
+        }
         if (qty < ho->qty) {
             qtyProcessed += qty;
             ho->qty -= qty;
             total_qty_ -= qty;
-            tradeNotification(ho->id, takerOrderID, OrderStatus::FilledPartial, OrderStatus::FilledComplete, qty, ho->price);
+            tradeNotification(ho->id, takerOrderID, ho->user_id, takerUserID, OrderStatus::FilledPartial, OrderStatus::FilledComplete, qty, ho->price);
             break;
         } else {
             const auto makerOrderID = ho->id;
+            const auto makerUserID = ho->user_id;
             const auto makerPrice = ho->price;
             auto matchedQty = ho->qty;
             qtyProcessed += matchedQty;
@@ -56,7 +75,7 @@ Decimal OrderQueue::process(const TradeNotification& tradeNotification, const Po
             postFill(makerOrderID);
             // qty has already been decremented by matchedQty, so zero means taker is fully filled.
             const auto takerStatus = qty.is_zero() ? OrderStatus::FilledComplete : OrderStatus::FilledPartial;
-            tradeNotification(makerOrderID, takerOrderID, OrderStatus::FilledComplete, takerStatus, matchedQty, makerPrice);
+            tradeNotification(makerOrderID, takerOrderID, makerUserID, takerUserID, OrderStatus::FilledComplete, takerStatus, matchedQty, makerPrice);
         }
     }
 

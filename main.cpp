@@ -90,8 +90,8 @@ void throughput(int64_t seed, int duration, orderbook::Decimal lowerBound, order
         ob->cancelOrder(sellID);
         buyID = ++nextID;
         sellID = ++nextID;
-        ob->addOrder(buyID, Type::Limit, Side::Buy, bidQty, bid, Flag::None);
-        ob->addOrder(sellID, Type::Limit, Side::Sell, askQty, ask, Flag::None);
+        ob->addOrder(buyID, 0, Type::Limit, Side::Buy, bidQty, bid, Flag::None);
+        ob->addOrder(sellID, 0, Type::Limit, Side::Sell, askQty, ask, Flag::None);
 
         operations += 4;  // 2 cancels + 2 adds
     }

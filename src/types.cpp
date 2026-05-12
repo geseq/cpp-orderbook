@@ -74,6 +74,8 @@ std::ostream& operator<<(std::ostream& os, const Error& error) {
             return os << "InsufficientQty";
         case Error::NoMatching:
             return os << "NoMatching";
+        case Error::SelfTrade:
+            return os << "SelfTrade";
     }
     return os << "Unknown";
 }

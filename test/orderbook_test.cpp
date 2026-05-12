@@ -40,8 +40,9 @@ class LimitOrderTest : public ::testing::Test {
         } else if (parts[5] == "F") {
             flag = orderbook::FoK;
         }
+        UserID user_id = (parts.size() > 6) ? std::stoull(parts[6]) : 0;
 
-        ob->addOrder(oid, type, side, qty, price, flag);
+        ob->addOrder(oid, user_id, type, side, qty, price, flag);
     }
 
     void processOrders(std::shared_ptr<OrderBook<Notification>>& ob, const std::string& input, int prefix) {
@@ -753,6 +754,181 @@ TEST_F(LimitOrderTest, TestFoK_MarketBuy_CannotFill) {
 
     processLine(ob, "811	M	B	11	0	F");
     n.Verify({"CreateOrder Accepted 811 11 11"});
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Self-Trade Prevention
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Limit buy STP: taker (user 1) would match maker (user 1) at same price – no trade.
+TEST_F(LimitOrderTest, TestSTP_LimitBuy_SameUser_NoTrade) {
+    // User 1 places a sell limit at 100, qty 2.
+    processLine(ob, "900\tL\tS\t2\t100\tN\t1");
+    n.Reset();
+
+    // User 1 places a buy limit at 100 – self-trade, should not execute.
+    processLine(ob, "901\tL\tB\t2\t100\tN\t1");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 901 2 2"});
+    // clang-format on
+    // Taker rests in the book (no fill occurred).
+    ASSERT_TRUE(ob->hasOrder(901));
+}
+
+// Limit sell STP: taker (user 2) would match maker (user 2) at same price – no trade.
+TEST_F(LimitOrderTest, TestSTP_LimitSell_SameUser_NoTrade) {
+    // User 2 places a buy limit at 90, qty 2.
+    processLine(ob, "910\tL\tB\t2\t90\tN\t2");
+    n.Reset();
+
+    // User 2 places a sell limit at 90 – self-trade, should not execute.
+    processLine(ob, "911\tL\tS\t2\t90\tN\t2");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 911 2 2"});
+    // clang-format on
+    ASSERT_TRUE(ob->hasOrder(911));
+}
+
+// Limit buy STP: taker (user 1) skips maker (user 1) and trades with maker (user 2).
+TEST_F(LimitOrderTest, TestSTP_LimitBuy_SkipsSelfTradeMatchesOther) {
+    // User 1 places a sell at 100, qty 2 (self-trade target).
+    processLine(ob, "920\tL\tS\t2\t100\tN\t1");
+    // User 2 places a sell at 100, qty 2 (valid match).
+    processLine(ob, "921\tL\tS\t2\t100\tN\t2");
+    n.Reset();
+
+    // User 1 places a buy at 100, qty 2 – skips own order (920), trades with user 2 (921).
+    processLine(ob, "922\tL\tB\t2\t100\tN\t1");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 922 2 2",
+              "921 922 FilledComplete FilledComplete 2 100"});
+    // clang-format on
+    ASSERT_FALSE(ob->hasOrder(922));
+    // User 1's own sell order still rests in the book.
+    ASSERT_TRUE(ob->hasOrder(920));
+}
+
+// Market buy STP: taker (user 1) skips self-trade maker and trades with different-user maker.
+TEST_F(LimitOrderTest, TestSTP_MarketBuy_SkipsSelfTradeMatchesOther) {
+    // User 1 places a sell at 100, qty 2.
+    processLine(ob, "930\tL\tS\t2\t100\tN\t1");
+    // User 2 places a sell at 110, qty 2.
+    processLine(ob, "931\tL\tS\t2\t110\tN\t2");
+    n.Reset();
+
+    // User 1 market buy, qty 2 – skips own 930, trades with 931 (user 2).
+    processLine(ob, "932\tM\tB\t2\t0\tN\t1");
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 932 2 2",
+              "931 932 FilledComplete FilledComplete 2 110"});
+    // clang-format on
+    ASSERT_TRUE(ob->hasOrder(930));
+}
+
+// Limit buy STP: all resting asks belong to the taker – taker rests, no trade.
+TEST_F(LimitOrderTest, TestSTP_LimitBuy_AllSelfTrade_TakerRests) {
+    // User 3 places two sell orders.
+    processLine(ob, "940\tL\tS\t2\t100\tN\t3");
+    processLine(ob, "941\tL\tS\t2\t110\tN\t3");
+    n.Reset();
+
+    // User 3 buys – all asks are own orders, nothing trades, taker rests.
+    processLine(ob, "942\tL\tB\t4\t110\tN\t3");
+    n.Verify({"CreateOrder Accepted 942 4 4"});
+    ASSERT_TRUE(ob->hasOrder(942));
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// STP + AoN/FoK: pre-check must be STP-aware (exclude same-user qty)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// AoN market sell: only self-liquidity exists – STP-aware pre-check must reject,
+// no trades, maker order survives.
+TEST_F(LimitOrderTest, TestSTP_AoN_MarketSell_SelfLiquidityOnly_NoFill) {
+    processLine(ob, "1000\tL\tB\t2\t90\tN\t1");
+    n.Reset();
+
+    // User 1 market AoN sell qty=2; all bids belong to user 1 → must not fill.
+    processLine(ob, "1001\tM\tS\t2\t0\tA\t1");
+    n.Verify({"CreateOrder Accepted 1001 2 2"});
+    ASSERT_TRUE(ob->hasOrder(1000));
+}
+
+// AoN market buy: only self-liquidity exists – must not fill.
+TEST_F(LimitOrderTest, TestSTP_AoN_MarketBuy_SelfLiquidityOnly_NoFill) {
+    processLine(ob, "1010\tL\tS\t2\t100\tN\t1");
+    n.Reset();
+
+    processLine(ob, "1011\tM\tB\t2\t0\tA\t1");
+    n.Verify({"CreateOrder Accepted 1011 2 2"});
+    ASSERT_TRUE(ob->hasOrder(1010));
+}
+
+// AoN limit buy: only matching ask is own order – STP-aware pre-check must reject;
+// taker rests (AoN limit rests when it cannot fill), maker not consumed.
+TEST_F(LimitOrderTest, TestSTP_AoN_LimitBuy_SelfLiquidityOnly_TakerRests) {
+    processLine(ob, "1020\tL\tS\t2\t100\tN\t1");
+    n.Reset();
+
+    processLine(ob, "1021\tL\tB\t2\t100\tA\t1");
+    n.Verify({"CreateOrder Accepted 1021 2 2"});
+    ASSERT_TRUE(ob->hasOrder(1021));
+    ASSERT_TRUE(ob->hasOrder(1020));
+}
+
+// FoK limit buy: only self-liquidity at the limit – must be killed (FoK never rests).
+TEST_F(LimitOrderTest, TestSTP_FoK_LimitBuy_SelfLiquidityOnly_Killed) {
+    processLine(ob, "1030\tL\tS\t2\t100\tN\t1");
+    n.Reset();
+
+    processLine(ob, "1031\tL\tB\t2\t100\tF\t1");
+    n.Verify({"CreateOrder Accepted 1031 2 2"});
+    ASSERT_FALSE(ob->hasOrder(1031));
+    ASSERT_TRUE(ob->hasOrder(1030));
+}
+
+// AoN market buy: non-self ask volume is insufficient (naive check passes: total=self+other >= qty,
+// but non-self alone < qty). Without the fix this partially fills from the non-self side.
+TEST_F(LimitOrderTest, TestSTP_AoN_MarketBuy_PartialSelfLiquidity_NoFill) {
+    processLine(ob, "1050\tL\tS\t1\t100\tN\t1");  // user 1, qty=1 at 100 (self)
+    processLine(ob, "1051\tL\tS\t1\t110\tN\t2");  // user 2, qty=1 at 110 (non-self)
+    n.Reset();
+
+    // User 1 AoN buy qty=2: total=2 passes naive check, but non-self=1 < 2 → must not fill.
+    processLine(ob, "1052\tM\tB\t2\t0\tA\t1");
+    n.Verify({"CreateOrder Accepted 1052 2 2"});
+    ASSERT_TRUE(ob->hasOrder(1050));
+    ASSERT_TRUE(ob->hasOrder(1051));
+}
+
+// AoN limit buy: self-order and other-order sit at the same price level; non-self qty < requested.
+// Without the fix the AoN pre-check uses totalQty (self+other) and passes, then partially fills.
+TEST_F(LimitOrderTest, TestSTP_AoN_LimitBuy_PartialSelfLiquidity_NoFill) {
+    processLine(ob, "1060\tL\tS\t2\t100\tN\t1");  // user 1, qty=2 at 100 (self)
+    processLine(ob, "1061\tL\tS\t1\t100\tN\t2");  // user 2, qty=1 at 100 (non-self)
+    n.Reset();
+
+    // User 1 AoN buy qty=3 at 100: totalQty=3 satisfies pre-check, but non-self=1 < 3 → must not fill.
+    processLine(ob, "1062\tL\tB\t3\t100\tA\t1");
+    n.Verify({"CreateOrder Accepted 1062 3 3"});
+    ASSERT_TRUE(ob->hasOrder(1062));  // AoN rests when it cannot fill
+    ASSERT_TRUE(ob->hasOrder(1060));
+    ASSERT_TRUE(ob->hasOrder(1061));
+}
+
+// FoK limit buy: same-price level has self + non-self; non-self qty < requested.
+// Without the fix the FoK pre-check passes then partially executes before being killed.
+TEST_F(LimitOrderTest, TestSTP_FoK_LimitBuy_PartialSelfLiquidity_Killed) {
+    processLine(ob, "1070\tL\tS\t2\t100\tN\t1");  // user 1, qty=2 at 100 (self)
+    processLine(ob, "1071\tL\tS\t1\t100\tN\t2");  // user 2, qty=1 at 100 (non-self)
+    n.Reset();
+
+    // User 1 FoK buy qty=3 at 100: non-self=1 < 3 → must be killed with no trades.
+    processLine(ob, "1072\tL\tB\t3\t100\tF\t1");
+    n.Verify({"CreateOrder Accepted 1072 3 3"});
+    ASSERT_FALSE(ob->hasOrder(1072));  // FoK killed
+    ASSERT_TRUE(ob->hasOrder(1070));
+    ASSERT_TRUE(ob->hasOrder(1071));
 }
 
 int main(int argc, char** argv) {

@@ -10,7 +10,7 @@
 namespace orderbook {
 
 using TradeNotification =
-    std::function<void(OrderID mOrderID, OrderID tOrderID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty, Decimal price)>;
+    std::function<void(OrderID mOrderID, OrderID tOrderID, UserID mUserID, UserID tUserID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty, Decimal price)>;
 using PostOrderFill = std::function<void(OrderID canceledOrderID)>;
 
 using OrderList = boost::intrusive::list<Order>;
@@ -28,7 +28,8 @@ class OrderQueue : public boost::intrusive::set_base_hook<boost::intrusive::opti
     [[nodiscard]] Decimal totalQty() const;
     void append(Order *o);
     void remove(Order *o);
-    Decimal process(const TradeNotification &tn, const PostOrderFill &postFill, OrderID takerOrderID, Decimal qty);
+    Decimal process(const TradeNotification &tn, const PostOrderFill &postFill, OrderID takerOrderID, UserID takerUserID, Decimal qty);
+    [[nodiscard]] Decimal availableQty(UserID takerUserID) const;
     [[nodiscard]] const OrderList &order_list() const { return orders_; }
 
     friend bool operator<(const OrderQueue &a, const OrderQueue &b) { return a.price_ < b.price_; }
