@@ -24,8 +24,8 @@ class OrderBook {
           asks_(PriceLevel<PriceType::Ask>(price_level_pool_size)),
           orders_(OrderMap()){};
 
-    void addOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
-    void putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price);
+    void addOrder(OrderID id, UserID user_id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
+    void putTradeNotification(OrderID mOrderID, OrderID tOrderID, UserID mUserID, UserID tUserID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price);
     void cancelOrder(OrderID id);
     bool hasOrder(OrderID id);
     void setMatching(bool matching) { matching_ = matching; }
@@ -46,17 +46,18 @@ class OrderBook {
 
     bool matching_ = true;
 
-    std::pair<Decimal, Decimal> eraseOrder(OrderID id);
-    void processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
+    std::tuple<Decimal, Decimal, UserID> eraseOrder(OrderID id);
+    void processOrder(OrderID id, UserID user_id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
 };
 
 template <class Notification>
-void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
+void OrderBook<Notification>::addOrder(OrderID id, UserID user_id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
     if (qty.is_zero()) [[unlikely]] {
         notification_.onExecutionReport(ExecutionReport{
             .exec_type = ExecType::Rejected,
             .msg_type = MsgType::CreateOrder,
             .order_id = id,
+            .user_id = user_id,
             .status = OrderStatus::Rejected,
             .qty = qty,
             .original_qty = qty,
@@ -71,6 +72,7 @@ void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal
                 .exec_type = ExecType::Rejected,
                 .msg_type = MsgType::CreateOrder,
                 .order_id = id,
+                .user_id = user_id,
                 .status = OrderStatus::Rejected,
                 .qty = qty,
                 .original_qty = qty,
@@ -86,6 +88,7 @@ void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal
                     .exec_type = ExecType::Rejected,
                     .msg_type = MsgType::CreateOrder,
                     .order_id = id,
+                    .user_id = user_id,
                     .status = OrderStatus::Rejected,
                     .qty = qty,
                     .original_qty = qty,
@@ -100,6 +103,7 @@ void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal
                     .exec_type = ExecType::Rejected,
                     .msg_type = MsgType::CreateOrder,
                     .order_id = id,
+                    .user_id = user_id,
                     .status = OrderStatus::Rejected,
                     .qty = qty,
                     .original_qty = qty,
@@ -116,6 +120,7 @@ void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal
                 .exec_type = ExecType::Rejected,
                 .msg_type = MsgType::CreateOrder,
                 .order_id = id,
+                .user_id = user_id,
                 .status = OrderStatus::Rejected,
                 .qty = uint64_t(0),
                 .original_qty = qty,
@@ -129,6 +134,7 @@ void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal
                 .exec_type = ExecType::Rejected,
                 .msg_type = MsgType::CreateOrder,
                 .order_id = id,
+                .user_id = user_id,
                 .status = OrderStatus::Rejected,
                 .qty = uint64_t(0),
                 .original_qty = qty,
@@ -142,26 +148,27 @@ void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal
         .exec_type = ExecType::New,
         .msg_type = MsgType::CreateOrder,
         .order_id = id,
+        .user_id = user_id,
         .status = OrderStatus::Accepted,
         .qty = qty,
         .original_qty = qty,
     });
-    processOrder(id, type, side, qty, price, flag);
+    processOrder(id, user_id, type, side, qty, price, flag);
 }
 
 template <class Notification>
-void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
-    const auto tradeNotification = [this](OrderID mOrderID, OrderID tOrderID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty, Decimal price) {
-        this->putTradeNotification(mOrderID, tOrderID, mOrderStatus, tOrderStatus, qty, price);
+void OrderBook<Notification>::processOrder(OrderID id, UserID user_id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
+    const auto tradeNotification = [this](OrderID mOrderID, OrderID tOrderID, UserID mUserID, UserID tUserID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty, Decimal price) {
+        this->putTradeNotification(mOrderID, tOrderID, mUserID, tUserID, mOrderStatus, tOrderStatus, qty, price);
         this->last_price = price;
     };
     const auto postOrderFill = [this](OrderID id) { this->eraseOrder(id); };
 
     if (type == Type::Market) {
         if (side == Side::Buy) {
-            asks_.processMarketOrder(tradeNotification, postOrderFill, id, qty, flag);
+            asks_.processMarketOrder(tradeNotification, postOrderFill, id, user_id, qty, flag);
         } else {
-            bids_.processMarketOrder(tradeNotification, postOrderFill, id, qty, flag);
+            bids_.processMarketOrder(tradeNotification, postOrderFill, id, user_id, qty, flag);
         }
 
         return;
@@ -169,9 +176,9 @@ void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Dec
 
     Decimal qtyProcessed;
     if (side == Side::Buy) {
-        qtyProcessed = asks_.processLimitOrder(tradeNotification, postOrderFill, id, price, qty, flag);
+        qtyProcessed = asks_.processLimitOrder(tradeNotification, postOrderFill, id, user_id, price, qty, flag);
     } else {
-        qtyProcessed = bids_.processLimitOrder(tradeNotification, postOrderFill, id, price, qty, flag);
+        qtyProcessed = bids_.processLimitOrder(tradeNotification, postOrderFill, id, user_id, price, qty, flag);
     }
 
     if ((flag & (IoC | FoK)) != 0) {
@@ -180,7 +187,7 @@ void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Dec
 
     auto qtyLeft = qty - qtyProcessed;
     if (qtyLeft > uint64_t(0)) {
-        auto* o = order_pool_.acquire(id, type, side, qtyLeft, price, flag);
+        auto* o = order_pool_.acquire(id, user_id, type, side, qtyLeft, price, flag);
         o->original_qty = qty;
         if (side == Side::Buy) {
             bids_.append(o);
@@ -195,11 +202,13 @@ void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Dec
 }
 
 template <class Notification>
-void OrderBook<Notification>::putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {
+void OrderBook<Notification>::putTradeNotification(OrderID mOrderID, OrderID tOrderID, UserID mUserID, UserID tUserID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {
     notification_.onExecutionReport(ExecutionReport{
         .exec_type = ExecType::Trade,
         .maker_order_id = mOrderID,
         .taker_order_id = tOrderID,
+        .maker_user_id = mUserID,
+        .taker_user_id = tUserID,
         .maker_status = mStatus,
         .taker_status = tStatus,
         .last_qty = qty,
@@ -209,7 +218,7 @@ void OrderBook<Notification>::putTradeNotification(OrderID mOrderID, OrderID tOr
 
 template <class Notification>
 void OrderBook<Notification>::cancelOrder(OrderID id) {
-    auto [qty, original_qty] = eraseOrder(id);
+    auto [qty, original_qty, user_id] = eraseOrder(id);
     if (qty.is_zero()) {
         notification_.onExecutionReport(ExecutionReport{
             .exec_type = ExecType::Rejected,
@@ -227,6 +236,7 @@ void OrderBook<Notification>::cancelOrder(OrderID id) {
         .exec_type = ExecType::Canceled,
         .msg_type = MsgType::CancelOrder,
         .order_id = id,
+        .user_id = user_id,
         .status = OrderStatus::Canceled,
         .qty = qty,
         .original_qty = original_qty,
@@ -234,10 +244,10 @@ void OrderBook<Notification>::cancelOrder(OrderID id) {
 }
 
 template <class Notification>
-std::pair<Decimal, Decimal> OrderBook<Notification>::eraseOrder(OrderID id) {
+std::tuple<Decimal, Decimal, UserID> OrderBook<Notification>::eraseOrder(OrderID id) {
     auto it = orders_.find(id, OrderIDCompare());
     if (it == orders_.end()) {
-        return {uint64_t(0), uint64_t(0)};
+        return {uint64_t(0), uint64_t(0), uint64_t(0)};
     }
 
     auto& pool = order_pool_;
@@ -245,13 +255,14 @@ std::pair<Decimal, Decimal> OrderBook<Notification>::eraseOrder(OrderID id) {
     scope_exit defer([&pool, &order]() { pool.release(order); });
     orders_.erase(*it);
 
+    const UserID user_id = order->user_id;
     if (order->side == Side::Buy) {
         bids_.remove(order);
-        return {order->qty, order->original_qty};
+        return {order->qty, order->original_qty, user_id};
     }
 
     asks_.remove(order);
-    return {order->qty, order->original_qty};
+    return {order->qty, order->original_qty, user_id};
 }
 
 template <class Notification>

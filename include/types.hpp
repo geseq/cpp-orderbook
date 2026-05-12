@@ -11,6 +11,7 @@ namespace orderbook {
 
 using Decimal = decimal::U8;
 using OrderID = uint64_t;
+using UserID = uint64_t;
 
 enum class Type : uint8_t {
     Limit,
@@ -58,6 +59,7 @@ enum class Error : uint16_t {
     OrderNotExists,
     InsufficientQty,
     NoMatching,
+    SelfTrade,
 };
 
 std::ostream& operator<<(std::ostream& os, const Error& error);
@@ -87,6 +89,7 @@ struct ExecutionReport {
     // Order event fields (New, Rejected, Canceled)
     MsgType msg_type{};
     OrderID order_id{};
+    UserID user_id{};
     OrderStatus status{};
     Decimal qty{};
     Decimal original_qty{};
@@ -94,6 +97,8 @@ struct ExecutionReport {
     // Trade event fields
     OrderID maker_order_id{};
     OrderID taker_order_id{};
+    UserID maker_user_id{};
+    UserID taker_user_id{};
     OrderStatus maker_status{};
     OrderStatus taker_status{};
     Decimal last_qty{};

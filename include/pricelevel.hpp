@@ -50,10 +50,10 @@ class PriceLevel {
     [[nodiscard]] OrderQueue* getNextQueue(const Decimal& price);
 
     template <PriceType Q = P>
-    Decimal processMarketOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal qty, Flag flag);
+    Decimal processMarketOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, UserID takerUserID, Decimal qty, Flag flag);
 
     template <PriceType Q = P>
-    Decimal processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal price, Decimal qty, Flag flag);
+    Decimal processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, UserID takerUserID, Decimal price, Decimal qty, Flag flag);
 
     const PriceTree& price_tree() const { return price_tree_; };
 };

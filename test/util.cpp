@@ -16,6 +16,7 @@ using orderbook::OrderID;
 using orderbook::OrderStatus;
 using orderbook::Side;
 using orderbook::Type;
+using orderbook::UserID;
 
 class Notification : public orderbook::NotificationInterface<Notification> {
    public:

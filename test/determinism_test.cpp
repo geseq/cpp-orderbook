@@ -21,6 +21,7 @@ class DeterminismTest : public ::testing::Test {
         Decimal price = Decimal(0, 0);
         Flag flag = Flag::None;
         bool matching = true;
+        UserID user_id = 0;
     };
 
     static void applyAction(const Action& action, const std::shared_ptr<OrderBook<Notification>>& localOb) {
@@ -29,7 +30,7 @@ class DeterminismTest : public ::testing::Test {
         } else if (action.kind == Action::Kind::Cancel) {
             localOb->cancelOrder(action.id);
         } else {
-            localOb->addOrder(action.id, action.type, action.side, action.qty, action.price, action.flag);
+            localOb->addOrder(action.id, action.user_id, action.type, action.side, action.qty, action.price, action.flag);
         }
     }
 
@@ -151,11 +152,11 @@ TEST_F(DeterminismTest, IndependentBooksStayIsolated) {
     auto ob1 = std::make_shared<orderbook::OrderBook<Notification>>(n1);
     auto ob2 = std::make_shared<orderbook::OrderBook<Notification>>(n2);
 
-    ob1->addOrder(1000, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(100, 0), Flag::None);
-    ob1->addOrder(1001, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None);
+    ob1->addOrder(1000, 0, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(100, 0), Flag::None);
+    ob1->addOrder(1001, 0, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None);
 
-    ob2->addOrder(2000, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(100, 0), Flag::None);
-    ob2->addOrder(2001, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None);
+    ob2->addOrder(2000, 0, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(100, 0), Flag::None);
+    ob2->addOrder(2001, 0, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None);
 
     n1.Verify({"CreateOrder Accepted 1000 2 2", "CreateOrder Accepted 1001 2 2", "1000 1001 FilledComplete FilledComplete 2 100"});
     n2.Verify({"CreateOrder Accepted 2000 2 2", "CreateOrder Accepted 2001 2 2", "2000 2001 FilledComplete FilledComplete 2 100"});
