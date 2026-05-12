@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <map>
 #include <sstream>
+#include <tuple>
 #include <utility>
 
 #include "boost/intrusive/rbtree.hpp"
