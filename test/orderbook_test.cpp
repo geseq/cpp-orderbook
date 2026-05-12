@@ -12,10 +12,12 @@ class LimitOrderTest : public ::testing::Test {
    protected:
     Notification n;
     std::shared_ptr<OrderBook<Notification>> ob;
+    uint64_t next_seq_ = 0;
 
     void SetUp() override {
         n = Notification();
         ob = std::make_shared<orderbook::OrderBook<Notification>>(n);
+        next_seq_ = 0;
     }
 
     void TearDown() override {}
@@ -41,7 +43,7 @@ class LimitOrderTest : public ::testing::Test {
             flag = orderbook::FoK;
         }
 
-        ob->addOrder(oid, type, side, qty, price, flag);
+        ob->addOrder(oid, ++next_seq_, type, side, qty, price, flag);
     }
 
     void processOrders(std::shared_ptr<OrderBook<Notification>>& ob, const std::string& input, int prefix) {
@@ -141,6 +143,40 @@ TEST_F(LimitOrderTest, TestLimitOrder_CreateWithZeroPrice) {
     processLine(ob, "170	L	S	10	0	N");
     n.Verify({"CreateOrder Rejected 170 0 10 ErrInvalidPrice"});
 }
+
+TEST_F(LimitOrderTest, TestSeqNum_RejectsSameSeq) {
+    n.Reset();
+    // Force two orders through with the same seq by calling addOrder directly.
+    ob->addOrder(1, 1, Type::Limit, Side::Buy, Decimal("1"), Decimal("50"), Flag::None);
+    ob->addOrder(2, 1, Type::Limit, Side::Buy, Decimal("1"), Decimal("50"), Flag::None);
+    n.Verify({"CreateOrder Accepted 1 1 1", "CreateOrder Rejected 2 0 1 ErrOrderID"});
+}
+
+TEST_F(LimitOrderTest, TestSeqNum_RejectsLowerSeq) {
+    n.Reset();
+    ob->addOrder(1, 5, Type::Limit, Side::Buy, Decimal("1"), Decimal("50"), Flag::None);
+    ob->addOrder(2, 3, Type::Limit, Side::Buy, Decimal("1"), Decimal("50"), Flag::None);
+    n.Verify({"CreateOrder Accepted 1 1 1", "CreateOrder Rejected 2 0 1 ErrOrderID"});
+}
+
+TEST_F(LimitOrderTest, TestSeqNum_MarketOrderAlsoEnforced) {
+    // The original bug: market orders bypassed the duplicate-id check.
+    // With a seq number the same enforcement applies to all order types.
+    n.Reset();
+    ob->addOrder(1, 5, Type::Market, Side::Buy, Decimal("1"), Decimal("0"), Flag::None);
+    ob->addOrder(2, 5, Type::Market, Side::Buy, Decimal("1"), Decimal("0"), Flag::None);
+    n.Verify({"CreateOrder Accepted 1 1 1", "CreateOrder Rejected 2 0 1 ErrOrderID"});
+}
+
+TEST_F(LimitOrderTest, TestSeqNum_ReuseOrderIDWithDifferentSeq) {
+    // Same order ID is allowed as long as seq advances (e.g. iceberg refills).
+    n.Reset();
+    ob->addOrder(42, 1, Type::Limit, Side::Buy, Decimal("1"), Decimal("50"), Flag::None);
+    ob->cancelOrder(42);
+    ob->addOrder(42, 2, Type::Limit, Side::Buy, Decimal("1"), Decimal("50"), Flag::None);
+    n.Verify({"CreateOrder Accepted 42 1 1", "CancelOrder Canceled 42 1 1", "CreateOrder Accepted 42 1 1"});
+}
+
 
 TEST_F(LimitOrderTest, TestLimitOrder_CreateDuplicateOrderID) {
     addDepth(ob);

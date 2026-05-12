@@ -23,21 +23,22 @@ class DeterminismTest : public ::testing::Test {
         bool matching = true;
     };
 
-    static void applyAction(const Action& action, const std::shared_ptr<OrderBook<Notification>>& localOb) {
+    static void applyAction(const Action& action, const std::shared_ptr<OrderBook<Notification>>& localOb, uint64_t& seq) {
         if (action.kind == Action::Kind::SetMatching) {
             localOb->setMatching(action.matching);
         } else if (action.kind == Action::Kind::Cancel) {
             localOb->cancelOrder(action.id);
         } else {
-            localOb->addOrder(action.id, action.type, action.side, action.qty, action.price, action.flag);
+            localOb->addOrder(action.id, ++seq, action.type, action.side, action.qty, action.price, action.flag);
         }
     }
 
     static std::tuple<std::vector<std::string>, std::string, Decimal> runSequence(const std::vector<Action>& actions) {
         Notification notification;
         auto localOb = std::make_shared<orderbook::OrderBook<Notification>>(notification);
+        uint64_t seq = 0;
         for (const auto& action : actions) {
-            applyAction(action, localOb);
+            applyAction(action, localOb, seq);
         }
         return std::tuple{notification.Strings(), localOb->toString(), localOb->last_price};
     }
@@ -151,11 +152,11 @@ TEST_F(DeterminismTest, IndependentBooksStayIsolated) {
     auto ob1 = std::make_shared<orderbook::OrderBook<Notification>>(n1);
     auto ob2 = std::make_shared<orderbook::OrderBook<Notification>>(n2);
 
-    ob1->addOrder(1000, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(100, 0), Flag::None);
-    ob1->addOrder(1001, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None);
+    ob1->addOrder(1000, 1, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(100, 0), Flag::None);
+    ob1->addOrder(1001, 2, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None);
 
-    ob2->addOrder(2000, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(100, 0), Flag::None);
-    ob2->addOrder(2001, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None);
+    ob2->addOrder(2000, 1, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(100, 0), Flag::None);
+    ob2->addOrder(2001, 2, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None);
 
     n1.Verify({"CreateOrder Accepted 1000 2 2", "CreateOrder Accepted 1001 2 2", "1000 1001 FilledComplete FilledComplete 2 100"});
     n2.Verify({"CreateOrder Accepted 2000 2 2", "CreateOrder Accepted 2001 2 2", "2000 2001 FilledComplete FilledComplete 2 100"});
@@ -166,26 +167,28 @@ TEST_F(DeterminismTest, RecoverAtEveryMidpointThenReplaySuffix) {
     const auto actions = marketAActions();
 
     for (size_t split = 0; split <= actions.size(); ++split) {
+        uint64_t baselineSeq = 0;
         Notification baselineN;
         auto baselineOb = std::make_shared<orderbook::OrderBook<Notification>>(baselineN);
         for (size_t i = 0; i < split; ++i) {
-            applyAction(actions[i], baselineOb);
+            applyAction(actions[i], baselineOb, baselineSeq);
         }
         const auto snapshotBookState = baselineOb->toString();
         const auto snapshotLastPrice = baselineOb->last_price;
 
         baselineN.Reset();
         for (size_t i = split; i < actions.size(); ++i) {
-            applyAction(actions[i], baselineOb);
+            applyAction(actions[i], baselineOb, baselineSeq);
         }
         const auto baselineSuffixReports = baselineN.Strings();
         const auto baselineFinalBook = baselineOb->toString();
         const auto baselineFinalLastPrice = baselineOb->last_price;
 
+        uint64_t recoveredSeq = 0;
         Notification recoveredN;
         auto recoveredOb = std::make_shared<orderbook::OrderBook<Notification>>(recoveredN);
         for (size_t i = 0; i < split; ++i) {
-            applyAction(actions[i], recoveredOb);
+            applyAction(actions[i], recoveredOb, recoveredSeq);
         }
 
         ASSERT_EQ(recoveredOb->toString(), snapshotBookState) << "split=" << split;
@@ -193,7 +196,7 @@ TEST_F(DeterminismTest, RecoverAtEveryMidpointThenReplaySuffix) {
 
         recoveredN.Reset();
         for (size_t i = split; i < actions.size(); ++i) {
-            applyAction(actions[i], recoveredOb);
+            applyAction(actions[i], recoveredOb, recoveredSeq);
         }
 
         ASSERT_EQ(recoveredN.Strings(), baselineSuffixReports) << "split=" << split;
@@ -240,14 +243,15 @@ TEST_F(DeterminismTest, TwoCopiesPerMarketRemainDeterministicWithDifferentInterl
     auto obB2 = std::make_shared<orderbook::OrderBook<Notification>>(nB2);
 
     const size_t maxActions = std::max(marketA.size(), marketB.size());
+    uint64_t seqA1 = 0, seqA2 = 0, seqB1 = 0, seqB2 = 0;
     for (size_t i = 0; i < maxActions; ++i) {
         if (i < marketA.size()) {
-            applyAction(marketA[i], obA1);
-            applyAction(marketA[i], obA2);
+            applyAction(marketA[i], obA1, seqA1);
+            applyAction(marketA[i], obA2, seqA2);
         }
         if (i < marketB.size()) {
-            applyAction(marketB[i], obB1);
-            applyAction(marketB[i], obB2);
+            applyAction(marketB[i], obB1, seqB1);
+            applyAction(marketB[i], obB2, seqB2);
         }
     }
 

@@ -11,6 +11,7 @@ namespace orderbook {
 
 using Decimal = decimal::U8;
 using OrderID = uint64_t;
+using SeqNum = uint64_t;
 
 enum class Type : uint8_t {
     Limit,

@@ -24,7 +24,7 @@ class OrderBook {
           asks_(PriceLevel<PriceType::Ask>(price_level_pool_size)),
           orders_(OrderMap()){};
 
-    void addOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
+    void addOrder(OrderID id, SeqNum seq, Type type, Side side, Decimal qty, Decimal price, Flag flag);
     void putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price);
     void cancelOrder(OrderID id);
     bool hasOrder(OrderID id);
@@ -46,12 +46,28 @@ class OrderBook {
 
     bool matching_ = true;
 
+    SeqNum last_seq_ = 0;
+
     std::pair<Decimal, Decimal> eraseOrder(OrderID id);
     void processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
 };
 
 template <class Notification>
-void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
+void OrderBook<Notification>::addOrder(OrderID id, SeqNum seq, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
+    if (seq <= last_seq_) [[unlikely]] {
+        notification_.onExecutionReport(ExecutionReport{
+            .exec_type = ExecType::Rejected,
+            .msg_type = MsgType::CreateOrder,
+            .order_id = id,
+            .status = OrderStatus::Rejected,
+            .qty = uint64_t(0),
+            .original_qty = qty,
+            .error = Error::OrderID,
+        });
+        return;
+    }
+    last_seq_ = seq;
+
     if (qty.is_zero()) [[unlikely]] {
         notification_.onExecutionReport(ExecutionReport{
             .exec_type = ExecType::Rejected,
