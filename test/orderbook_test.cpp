@@ -755,6 +755,27 @@ TEST_F(LimitOrderTest, TestFoK_MarketBuy_CannotFill) {
     n.Verify({"CreateOrder Accepted 811 11 11"});
 }
 
+TEST_F(LimitOrderTest, TestLimitOrder_SellDoesNotCrossPriceLimit) {
+    // Rest two bids at different prices.
+    processLine(ob, "1	L	B	2	9296	N");
+    processLine(ob, "2	L	B	2	9274	N");
+    n.Reset();
+
+    // Sell limit priced BETWEEN the two bids. It should fully clear the 9296
+    // bid (qty 2) and leave its remaining qty (1) resting, WITHOUT trading
+    // through to the 9274 bid which is below the limit price.
+    processLine(ob, "3	L	S	3	9286	N");
+
+    // Only one trade, against the 9296 bid. The 9274 bid must NOT trade.
+    // clang-format off
+    n.Verify({"CreateOrder Accepted 3 3 3",
+              "1 3 FilledComplete FilledPartial 2 9296"});
+    // clang-format on
+
+    // The 9274 bid must remain resting with its full quantity.
+    ASSERT_TRUE(ob->hasOrder(2));
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
