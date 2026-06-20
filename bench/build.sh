@@ -58,10 +58,18 @@ fi
 # we only need their headers, not the engine's own build artifacts.
 BUILD_DIR="$ENGINE/build/debug"
 if [ ! -d "$BUILD_DIR/_deps/decimal-src" ] || [ ! -d "$BUILD_DIR/_deps/pool-src" ] || [ ! -d "$BUILD_DIR/_deps/boost-src" ]; then
-    if [ -f "$ENGINE/CMakePresets.json" ] && "$CMAKE" --preset debug -S "$ENGINE" >/dev/null 2>&1; then
-        :
-    else
-        "$CMAKE" -S "$ENGINE" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Debug >/dev/null
+    # We only need CPM to FETCH the dependency headers into _deps/*-src; we do
+    # NOT need a fully successful configure. Newer CMake (>=3.31) removes the
+    # FindBoost module (policy CMP0167), so the engine's own
+    # `target_link_libraries(... Boost::intrusive)` can error LATE in configure
+    # — but CPM has already populated the _deps source trees by then. So treat
+    # configure as best-effort and let the include-dir existence check below be
+    # the real gate.
+    if [ -f "$ENGINE/CMakePresets.json" ]; then
+        "$CMAKE" --preset debug -S "$ENGINE" >/dev/null 2>&1 || true
+    fi
+    if [ ! -d "$BUILD_DIR/_deps/boost-src" ]; then
+        "$CMAKE" -S "$ENGINE" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Debug >/dev/null 2>&1 || true
     fi
 fi
 
