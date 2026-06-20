@@ -21,13 +21,8 @@
 name: "Matching Engine Benchmark Comparison"
 
 on:
+  # Manual only — run on demand from the Actions tab (or `gh workflow run`).
   workflow_dispatch:
-  schedule:
-    - cron: "0 5 * * *"
-  pull_request:
-    paths:
-      - ".github/workflows/benchmark-comparison.yml"
-      - "bench/**"
 
 env:
   BENCH_SHA: "77697a115e76a25a1e2aa886f555d55b87fcf052"
