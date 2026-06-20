@@ -1,0 +1,216 @@
+# Matching Engine Benchmark Comparison
+#
+# Runs BOTH the C++ engine (this repo, cpp-orderbook) and the Go engine
+# (geseq/orderbook) through the flash1-dev/matching-engine-benchmark harness
+# and emits a side-by-side comparison.
+#
+#   Benchmark harness : https://github.com/flash1-dev/matching-engine-benchmark
+#   Pinned SHA        : 77697a115e76a25a1e2aa886f555d55b87fcf052
+#   License           : MIT (benchmark harness is MIT-licensed)
+#
+# NOTE ON SIGNALS:
+#   * Throughput is INFORMATIONAL ONLY and is NOT gated on. Hosted GitHub
+#     runners are not performance-calibrated (shared CPUs, no isolation), so
+#     the msgs/s numbers are noisy and not comparable across runs.
+#   * Correctness (the harness's consensus-hash check, correctness.status) is
+#     the meaningful signal and IS the gate: the job fails if either engine
+#     fails any scenario.
+#   * The harness "audit" mode (Liquibook reference) is intentionally skipped;
+#     only perf mode is run here.
+
+name: "Matching Engine Benchmark Comparison"
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * *"
+  pull_request:
+    paths:
+      - ".github/workflows/benchmark-comparison.yml"
+      - "bench/**"
+
+env:
+  BENCH_SHA: "77697a115e76a25a1e2aa886f555d55b87fcf052"
+  BENCH_URL: "https://github.com/flash1-dev/matching-engine-benchmark"
+  GO_ENGINE_URL: "https://github.com/geseq/orderbook"
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout cpp-orderbook
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.23.x"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake libboost-all-dev
+
+      - name: Clone benchmark harness at pinned SHA
+        run: |
+          git clone "$BENCH_URL" bench-harness
+          git -C bench-harness checkout "$BENCH_SHA"
+
+      - name: Build benchmark harness
+        run: |
+          cmake -S bench-harness -B bench-harness/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc-14 \
+            -DCMAKE_CXX_COMPILER=g++-14
+          cmake --build bench-harness/build -j
+
+      - name: Build cpp-orderbook adapter
+        run: |
+          BENCH_SRC="$PWD/bench-harness" \
+          ME_ENGINE_SRC="$PWD" \
+          bash bench/build.sh
+          ls -l bench/cpp_orderbook_adapter.so
+
+      - name: Clone and build Go engine adapter
+        run: |
+          git clone --depth 1 "$GO_ENGINE_URL" go-engine
+          cd bench-harness
+          ME_GESEQ_SRC="$GITHUB_WORKSPACE/go-engine" \
+          bash additional_references/geseq_adapter/build.sh
+          ls -l geseq_adapter.so
+
+      - name: Run cpp-orderbook scenarios (perf)
+        working-directory: bench-harness
+        run: |
+          for scenario in static normal swing-25 swing-40 flash-crash; do
+            echo "::group::cpp $scenario"
+            ./harness \
+              --engine "$GITHUB_WORKSPACE/bench/cpp_orderbook_adapter.so" \
+              --scenario "$scenario" \
+              --mode perf \
+              --matcher-core 2 \
+              --drainer-core 3 || true
+            echo "::endgroup::"
+          done
+          # Isolate cpp results before the go run can mix into results/.
+          mkdir -p results-cpp
+          if ls results/*.json >/dev/null 2>&1; then
+            mv results/*.json results-cpp/
+          fi
+
+      - name: Run Go engine scenarios (perf)
+        working-directory: bench-harness
+        run: |
+          for scenario in static normal swing-25 swing-40 flash-crash; do
+            echo "::group::go $scenario"
+            ./harness \
+              --engine "./geseq_adapter.so" \
+              --scenario "$scenario" \
+              --mode perf \
+              --matcher-core 2 \
+              --drainer-core 3 || true
+            echo "::endgroup::"
+          done
+          mkdir -p results-go
+          if ls results/*.json >/dev/null 2>&1; then
+            mv results/*.json results-go/
+          fi
+
+      - name: Build comparison and gate on correctness
+        working-directory: bench-harness
+        run: |
+          python3 - <<'PY'
+          import glob, json, os, sys
+
+          SCENARIOS = ["static", "normal", "swing-25", "swing-40", "flash-crash"]
+
+          def load(dir_):
+              """Map scenario -> latest result dict for that scenario."""
+              out = {}
+              for path in sorted(glob.glob(os.path.join(dir_, "*.json"))):
+                  try:
+                      with open(path) as fh:
+                          data = json.load(fh)
+                  except (OSError, ValueError):
+                      continue
+                  scen = data.get("scenario")
+                  if scen is None:
+                      # Fall back to filename matching if the field is absent.
+                      base = os.path.basename(path)
+                      scen = next((s for s in SCENARIOS if f"_{s}_" in base), None)
+                  if scen:
+                      out[scen] = data  # sorted() => last wins == newest ts
+              return out
+
+          cpp = load("results-cpp")
+          go = load("results-go")
+
+          def correctness(d):
+              return (d or {}).get("correctness", {}).get("status", "MISSING")
+
+          def throughput(d):
+              v = (d or {}).get("throughput_msgs_per_s")
+              try:
+                  return float(v)
+              except (TypeError, ValueError):
+                  return None
+
+          def fmt_m(v):
+              return f"{v / 1e6:.3f}" if v is not None else "n/a"
+
+          lines = []
+          lines.append("## Matching Engine Benchmark Comparison")
+          lines.append("")
+          lines.append(f"Benchmark harness pinned at `{os.environ.get('BENCH_SHA', '?')}`.")
+          lines.append("")
+          lines.append("**Throughput is informational only** — hosted runners are not "
+                       "performance-calibrated, so msgs/s figures are noisy and not "
+                       "comparable across runs. **Correctness (consensus-hash) is the "
+                       "meaningful signal and the gate.**")
+          lines.append("")
+          lines.append("| Scenario | cpp correctness | cpp throughput (M msgs/s) | "
+                       "go correctness | go throughput (M msgs/s) | speedup (cpp/go) |")
+          lines.append("|---|---|---|---|---|---|")
+
+          for scen in SCENARIOS:
+              c, g = cpp.get(scen), go.get(scen)
+              ct, gt = throughput(c), throughput(g)
+              speedup = f"{ct / gt:.2f}x" if (ct and gt) else "n/a"
+              lines.append(
+                  f"| {scen} | {correctness(c)} | {fmt_m(ct)} | "
+                  f"{correctness(g)} | {fmt_m(gt)} | {speedup} |"
+              )
+
+          table = "\n".join(lines) + "\n"
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a") as fh:
+                  fh.write(table)
+          print(table)
+
+          # --- Gate: every scenario must PASS correctness for BOTH engines. ----
+          failures = []
+          for label, results in (("cpp", cpp), ("go", go)):
+              for scen in SCENARIOS:
+                  status = correctness(results.get(scen))
+                  if status != "PASS":
+                      failures.append(f"{label}/{scen}: correctness={status}")
+
+          if failures:
+              print("CORRECTNESS GATE FAILED:")
+              for f in failures:
+                  print(f"  - {f}")
+              sys.exit(1)
+          print("Correctness gate passed: all scenarios PASS for both engines.")
+          PY
+
+      - name: Upload result JSONs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            bench-harness/results-cpp/*.json
+            bench-harness/results-go/*.json
