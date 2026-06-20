@@ -18,6 +18,28 @@
 // geseq Go adapter (additional_references/geseq_adapter) one-for-one, except
 // cpp-orderbook's addOrder/cancelOrder take no monotonic token (the Go engine
 // does), so there is no token counter here.
+//
+// PERFORMANCE NOTES
+// -----------------
+// The engine's per-event report callback (onExecutionReport) is reached through
+// the CRTP NotificationInterface<Implementation>, i.e. a non-virtual, non-
+// std::function static dispatch the compiler can inline. This adapter's
+// HarnessNotification is a concrete struct with a single non-virtual handler,
+// so the engine inlines straight into it and the adapter adds NO indirection of
+// its own (no virtual, no std::function, no type erasure).
+//
+// The engine DOES route per-fill trade/fill notifications through std::function
+// internally: OrderQueue::process / PriceLevel::process{Market,Limit}Order take
+// `const TradeNotification&` / `const PostOrderFill&` (std::function aliases in
+// orderqueue.hpp), and src/pricelevel.cpp is *explicitly instantiated* against
+// those std::function types. That indirection is therefore ENGINE-level and
+// cannot be removed from the adapter without re-templating the engine; the
+// adapter just hands the engine the same onExecutionReport sink it always uses.
+//
+// Everything the adapter controls is on the stack and branch-lean: the report
+// struct is a stack local, the shadow store is a flat array indexed by order id
+// (O(1), pre-sized once, single cold growth branch), and the hot handlers are
+// always-inlined.
 
 #include <cstdint>
 #include <vector>
@@ -35,6 +57,8 @@ using orderbook::OrderID;
 using orderbook::Side;
 using orderbook::Type;
 
+#define HOT_INLINE __attribute__((always_inline, hot)) inline
+
 // ---------------------------------------------------------------------------
 // Decimal conversions.
 //
@@ -44,22 +68,26 @@ using orderbook::Type;
 // preserved bit-for-bit, and d.to_int() recovers fp / 10^8 = tick exactly
 // (round-trips). This mirrors the geseq Go adapter's udecimal.New(tick,0) /
 // d.Int().
+//
+// Decimal(i, 0) is a single constant multiply (i * 10^8 via precomputed_pow_10)
+// and to_int() is a single constant divide (fp / 10^8) — no string work, no
+// allocation, fully inlined.
 // ---------------------------------------------------------------------------
 
-static inline Decimal toDecPrice(int64_t ticks) {
-    if (ticks <= 0) {
+HOT_INLINE Decimal toDecPrice(int64_t ticks) {
+    if (ticks <= 0) [[unlikely]] {
         return Decimal(uint64_t(0));
     }
     return Decimal(uint64_t(ticks), 0);
 }
 
-static inline Decimal toDecQty(uint32_t q) { return Decimal(uint64_t(q), 0); }
+HOT_INLINE Decimal toDecQty(uint32_t q) { return Decimal(uint64_t(q), 0); }
 
-static inline int64_t fromDecPrice(const Decimal& d) { return int64_t(d.to_int()); }
+HOT_INLINE int64_t fromDecPrice(const Decimal& d) { return int64_t(d.to_int()); }
 
-static inline uint32_t fromDecQty(const Decimal& d) {
+HOT_INLINE uint32_t fromDecQty(const Decimal& d) {
     uint64_t v = d.to_int();
-    if (v > UINT32_MAX) {
+    if (v > UINT32_MAX) [[unlikely]] {
         return UINT32_MAX;
     }
     return uint32_t(v);
@@ -67,16 +95,31 @@ static inline uint32_t fromDecQty(const Decimal& d) {
 
 // ---------------------------------------------------------------------------
 // Shadow state.
+//
+// 16 bytes, packed: int64 price + uint32 remaining + uint8 side + bool alive
+// (+2 pad). Order quantities are uint32_t at the ABI boundary, so remaining
+// never exceeds uint32_t. Keeping the slot to 16 bytes (vs 24) halves the
+// cache footprint of the linear audit-query scans.
 // ---------------------------------------------------------------------------
 
 struct Shadow {
     int64_t price = 0;
-    uint64_t remaining = 0;
+    uint32_t remaining = 0;
     uint8_t side = 0;  // 0 = buy, 1 = sell
     bool alive = false;
 };
 
 namespace {
+
+// Pre-sized once to a generous upper bound (the canonical workload is ~1M new
+// orders). A raw base pointer over the vector's storage avoids re-reading the
+// vector control block per access; gShadowCap bounds it with a single cold
+// branch that almost never fires.
+constexpr size_t kShadowInit = size_t(1) << 22;
+
+std::vector<Shadow> gShadow;
+Shadow* gShadowBase = nullptr;
+size_t gShadowCap = 0;
 
 const me_transport_t* gTransport = nullptr;
 void* gSink = nullptr;
@@ -89,16 +132,18 @@ uint64_t gTakerFill = 0;
 bool gCancelOK = false;
 uint64_t gCancelQty = 0;
 
-std::vector<Shadow> gShadow;
-
 // Forward decls used by the notification handler.
-void emitTrade(uint64_t seq, uint64_t makerID, uint64_t takerID, int64_t price, uint32_t qty);
+HOT_INLINE void emitTrade(uint64_t seq, uint64_t makerID, uint64_t takerID, int64_t price, uint32_t qty);
 
-inline Shadow& shadowRef(uint64_t oid) {
-    if (oid >= gShadow.size()) {
+// O(1) shadow slot. The growth path is a single predicted-cold branch; the
+// store is pre-sized to kShadowInit so it never fires in the canonical run.
+HOT_INLINE Shadow* shadowSlot(uint64_t oid) {
+    if (oid >= gShadowCap) [[unlikely]] {
         gShadow.resize(oid + 1);
+        gShadowBase = gShadow.data();
+        gShadowCap = gShadow.size();
     }
-    return gShadow[oid];
+    return gShadowBase + oid;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +165,7 @@ inline Shadow& shadowRef(uint64_t oid) {
 
 class HarnessNotification : public orderbook::NotificationInterface<HarnessNotification> {
    public:
-    void onExecutionReport(const ExecutionReport& r) {
+    HOT_INLINE void onExecutionReport(const ExecutionReport& r) {
         switch (r.exec_type) {
             case ExecType::Trade: {
                 uint32_t q = fromDecQty(r.last_qty);
@@ -128,14 +173,12 @@ class HarnessNotification : public orderbook::NotificationInterface<HarnessNotif
                 emitTrade(gCurSeq, r.maker_order_id, r.taker_order_id, p, q);
                 gTakerFill += q;
 
-                Shadow& e = shadowRef(r.maker_order_id);
-                if (e.remaining >= q) {
-                    e.remaining -= q;
-                } else {
-                    e.remaining = 0;
-                }
-                if (e.remaining == 0) {
-                    e.alive = false;
+                Shadow* e = shadowSlot(r.maker_order_id);
+                uint32_t rem = e->remaining;
+                rem = (rem >= q) ? uint32_t(rem - q) : 0u;
+                e->remaining = rem;
+                if (rem == 0) {
+                    e->alive = false;
                 }
                 break;
             }
@@ -167,7 +210,7 @@ OrderBook<HarnessNotification>* gBook = nullptr;
 // Report emission.
 // ---------------------------------------------------------------------------
 
-inline void cpu_pause() {
+HOT_INLINE void cpu_pause() {
 #if defined(__x86_64__) || defined(__i386__)
     __builtin_ia32_pause();
 #else
@@ -175,13 +218,13 @@ inline void cpu_pause() {
 #endif
 }
 
-inline void emit(const me_report_t* r) {
-    while (gTransport->push(gSink, r) == 0) {
+HOT_INLINE void emit(const me_report_t* r) {
+    while (gTransport->push(gSink, r) == 0) [[unlikely]] {
         cpu_pause();  // spin until the transport accepts the report
     }
 }
 
-inline void emitAck(uint8_t rtype, uint64_t seq, uint64_t oid, uint8_t side, int64_t price, uint32_t qty) {
+HOT_INLINE void emitAck(uint8_t rtype, uint64_t seq, uint64_t oid, uint8_t side, int64_t price, uint32_t qty) {
     me_report_t r{};
     r.type = rtype;
     r.side = side;
@@ -192,7 +235,7 @@ inline void emitAck(uint8_t rtype, uint64_t seq, uint64_t oid, uint8_t side, int
     emit(&r);
 }
 
-void emitTrade(uint64_t seq, uint64_t makerID, uint64_t takerID, int64_t price, uint32_t qty) {
+HOT_INLINE void emitTrade(uint64_t seq, uint64_t makerID, uint64_t takerID, int64_t price, uint32_t qty) {
     me_report_t r{};
     r.type = ME_TRADE;
     r.side = 0;
@@ -209,12 +252,13 @@ void emitTrade(uint64_t seq, uint64_t makerID, uint64_t takerID, int64_t price, 
 // Per-message handlers (shared by the per-message ABI and engine_on_batch).
 // ---------------------------------------------------------------------------
 
-void onNewOrder(const new_order_t* o) {
-    uint64_t seq = o->sequence_number;
-    uint64_t oid = o->order_id;
-    uint8_t side = o->side;
-    int64_t price = o->price_ticks;
-    uint32_t qty = o->quantity;
+HOT_INLINE void onNewOrder(const new_order_t* o) {
+    const uint64_t seq = o->sequence_number;
+    const uint64_t oid = o->order_id;
+    const uint8_t side = o->side;
+    const int64_t price = o->price_ticks;
+    const uint32_t qty = o->quantity;
+    const uint8_t ioc = o->ioc;
 
     // 1. OrderAck. (Engine fires Accepted too; we ignore that.)
     emitAck(ME_ORDER_ACK, seq, oid, side, price, qty);
@@ -224,15 +268,15 @@ void onNewOrder(const new_order_t* o) {
     gCurSeq = seq;
     gTakerFill = 0;
 
-    Side sideT = (side == 0) ? Side::Buy : Side::Sell;
-    Flag flag = (o->ioc != 0) ? Flag::IoC : Flag::None;
+    const Side sideT = (side == 0) ? Side::Buy : Side::Sell;
+    const Flag flag = (ioc != 0) ? Flag::IoC : Flag::None;
 
     gBook->addOrder(oid, Type::Limit, sideT, toDecQty(qty), toDecPrice(price), flag);
 
-    uint64_t filled = gTakerFill;
-    uint32_t residual = (filled < qty) ? uint32_t(qty - filled) : 0;
+    const uint64_t filled = gTakerFill;
+    const uint32_t residual = (filled < qty) ? uint32_t(qty - filled) : 0;
 
-    if (o->ioc != 0) {
+    if (ioc != 0) [[unlikely]] {
         // IoC residual cancellation: emit a CancelAck for the unfilled
         // remainder. The engine discards the residual without notifying.
         if (residual > 0) {
@@ -242,51 +286,52 @@ void onNewOrder(const new_order_t* o) {
     }
 
     // GTC: shadow tracks the resting remainder.
-    Shadow& e = shadowRef(oid);
-    e.price = price;
-    e.side = side;
-    e.remaining = residual;
-    e.alive = (residual > 0);
+    Shadow* e = shadowSlot(oid);
+    e->price = price;
+    e->side = side;
+    e->remaining = residual;
+    e->alive = (residual > 0);
 }
 
-void onCancel(const cancel_t* c) {
-    uint64_t seq = c->sequence_number;
-    uint64_t oid = c->order_id;
+HOT_INLINE void onCancel(const cancel_t* c) {
+    const uint64_t seq = c->sequence_number;
+    const uint64_t oid = c->order_id;
 
     // The engine adjudicates: cancelOrder reports Canceled on removal, or
     // Rejected(OrderNotExists) for never-seen / already-terminal ids.
     gCancelOK = false;
     gCancelQty = 0;
     gBook->cancelOrder(oid);
-    if (!gCancelOK) {
+    if (!gCancelOK) [[unlikely]] {
         emitAck(ME_CANCEL_REJECT, seq, oid, 0, 0, 0);
         return;
     }
 
     // Payload echo: side/price from the shadow (the engine's report carries
     // neither); the quantity is the engine's own reported remainder.
-    Shadow& e = shadowRef(oid);
-    emitAck(ME_CANCEL_ACK, seq, oid, e.side, e.price, uint32_t(gCancelQty));
-    e.alive = false;  // audit queries scan alive/remaining
+    Shadow* e = shadowSlot(oid);
+    emitAck(ME_CANCEL_ACK, seq, oid, e->side, e->price, uint32_t(gCancelQty));
+    e->alive = false;  // audit queries scan alive/remaining
 }
 
-void onModify(const modify_t* m) {
-    uint64_t seq = m->sequence_number;
-    uint64_t oid = m->order_id;
-    int64_t newPrice = m->new_price_ticks;
-    uint32_t newQty = m->new_quantity;
+HOT_INLINE void onModify(const modify_t* m) {
+    const uint64_t seq = m->sequence_number;
+    const uint64_t oid = m->order_id;
+    const int64_t newPrice = m->new_price_ticks;
+    const uint32_t newQty = m->new_quantity;
 
     // The engine adjudicates the cancel half of cancel + reinsert: Rejected
     // (never seen / already terminal) maps to ModifyReject.
     gCancelOK = false;
     gCancelQty = 0;
     gBook->cancelOrder(oid);
-    if (!gCancelOK) {
+    if (!gCancelOK) [[unlikely]] {
         emitAck(ME_MODIFY_REJECT, seq, oid, 0, 0, 0);
         return;
     }
 
-    uint8_t side = shadowRef(oid).side;  // payload echo (report has no side)
+    Shadow* e = shadowSlot(oid);
+    const uint8_t side = e->side;  // payload echo (report has no side)
 
     emitAck(ME_MODIFY_ACK, seq, oid, side, newPrice, newQty);
 
@@ -294,17 +339,18 @@ void onModify(const modify_t* m) {
     gCurSeq = seq;
     gTakerFill = 0;
 
-    Side sideT = (side == 0) ? Side::Buy : Side::Sell;
+    const Side sideT = (side == 0) ? Side::Buy : Side::Sell;
     gBook->addOrder(oid, Type::Limit, sideT, toDecQty(newQty), toDecPrice(newPrice), Flag::None);
 
-    uint64_t filled = gTakerFill;
-    uint32_t residual = (filled < newQty) ? uint32_t(newQty - filled) : 0;
+    const uint64_t filled = gTakerFill;
+    const uint32_t residual = (filled < newQty) ? uint32_t(newQty - filled) : 0;
 
-    Shadow& e = shadowRef(oid);
-    e.price = newPrice;
-    e.side = side;
-    e.remaining = residual;
-    e.alive = (residual > 0);
+    // The reinsert may have grown the shadow store (cold), so re-fetch the slot.
+    e = shadowSlot(oid);
+    e->price = newPrice;
+    e->side = side;
+    e->remaining = residual;
+    e->alive = (residual > 0);
 }
 
 }  // namespace
@@ -323,7 +369,9 @@ void engine_init(uint64_t /*seed*/, const me_transport_t* transport, void* repor
     gCancelOK = false;
     gCancelQty = 0;
 
-    gShadow.assign(size_t(1) << 21, Shadow{});
+    gShadow.assign(kShadowInit, Shadow{});
+    gShadowBase = gShadow.data();
+    gShadowCap = gShadow.size();
 
     delete gBook;
     // Generous pools: the canonical workload has up to ~millions of orders;
@@ -336,6 +384,8 @@ void engine_shutdown(void) {
     gBook = nullptr;
     gShadow.clear();
     gShadow.shrink_to_fit();
+    gShadowBase = nullptr;
+    gShadowCap = 0;
 }
 
 void engine_on_new_order(const new_order_t* order) { onNewOrder(order); }
@@ -350,7 +400,10 @@ void engine_flush(void) {
 
 int64_t engine_query_best_bid(void) {
     int64_t best = INT64_MIN;
-    for (const Shadow& e : gShadow) {
+    const Shadow* s = gShadowBase;
+    const size_t n = gShadowCap;
+    for (size_t i = 0; i < n; ++i) {
+        const Shadow& e = s[i];
         if (e.alive && e.side == 0 && e.price > best) {
             best = e.price;
         }
@@ -360,7 +413,10 @@ int64_t engine_query_best_bid(void) {
 
 int64_t engine_query_best_ask(void) {
     int64_t best = INT64_MAX;
-    for (const Shadow& e : gShadow) {
+    const Shadow* s = gShadowBase;
+    const size_t n = gShadowCap;
+    for (size_t i = 0; i < n; ++i) {
+        const Shadow& e = s[i];
         if (e.alive && e.side == 1 && e.price < best) {
             best = e.price;
         }
@@ -370,7 +426,10 @@ int64_t engine_query_best_ask(void) {
 
 uint64_t engine_query_depth_at(int64_t price_ticks, uint8_t side) {
     uint64_t total = 0;
-    for (const Shadow& e : gShadow) {
+    const Shadow* s = gShadowBase;
+    const size_t n = gShadowCap;
+    for (size_t i = 0; i < n; ++i) {
+        const Shadow& e = s[i];
         if (e.alive && e.side == side && e.price == price_ticks) {
             total += e.remaining;
         }
