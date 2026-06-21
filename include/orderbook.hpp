@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "boost/intrusive/rbtree.hpp"
+#include "object_pool.hpp"
 #include "pricelevel.hpp"
 #include "types.hpp"
 #include "util.hpp"
@@ -35,7 +36,7 @@ class OrderBook {
     Decimal last_price;
 
    private:
-    pool::AdaptiveObjectPool<Order> order_pool_;
+    pool::ObjectPool<Order> order_pool_;
 
     PriceLevel<PriceType::Bid> bids_;
     PriceLevel<PriceType::Ask> asks_;
