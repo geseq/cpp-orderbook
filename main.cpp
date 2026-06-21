@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <deque>
 #include <iomanip>
 #include <iostream>
 #include <locale>
@@ -60,40 +61,42 @@ void latency(int64_t seed, int duration, int pd, orderbook::Decimal lowerBound, 
     // Implement the latency benchmark logic.
 }
 
-void throughput(int64_t seed, int duration, orderbook::Decimal lowerBound, orderbook::Decimal upperBound, orderbook::Decimal minSpread) {
+void throughput(int64_t seed, int duration, int depth, orderbook::Decimal lowerBound, orderbook::Decimal upperBound, orderbook::Decimal minSpread) {
     std::cout << "starting throughput benchmark...\n";
-    // Implement the throughput benchmark logic.
+    // Deep-book throughput: maintain a sliding window of `depth` live resting
+    // orders with monotonically climbing ids. Each iteration adds one order and,
+    // once the book is full, cancels the oldest still-live id — so the book stays
+    // ~depth deep and we measure the add/cancel/index/pool path at realistic
+    // depth. All orders rest on the bid side (no asks) so nothing ever crosses.
     auto n = orderbook::EmptyNotification();
     auto ob = std::make_unique<orderbook::OrderBook<orderbook::EmptyNotification>>(n);
-    orderbook::Decimal bid, ask, bidQty, askQty;
-    std::tie(bid, ask, bidQty, askQty) = getInitialVars(lowerBound, upperBound, minSpread);
 
-    uint64_t nextID = 0, buyID = 0, sellID = 0, operations = 0;
+    orderbook::Decimal qty(10, 0);
+    // Spread prices across the band on a minSpread tick grid.
+    int64_t ticks = ((upperBound - lowerBound) / minSpread).to_int();
+    if (ticks < 1) ticks = 1;
+
+    uint64_t nextID = 0, operations = 0;
+    std::deque<OrderID> live;  // ids of resting orders, oldest at front.
 
     auto end = std::chrono::steady_clock::now() + std::chrono::seconds(duration);
     std::default_random_engine generator(seed);
-    std::uniform_int_distribution<int> distribution(0, 9);
+    std::uniform_int_distribution<int64_t> distribution(0, ticks - 1);
 
     auto start = std::chrono::steady_clock::now();
     while (std::chrono::steady_clock::now() < end) {
-        int r = distribution(generator);
-        bool decrease = r < 5;
+        orderbook::Decimal price = lowerBound + minSpread * orderbook::Decimal(distribution(generator), 0);
 
-        std::tie(bid, ask) = getPrice(bid, ask, minSpread, decrease);
-        if (bid < lowerBound) {
-            std::tie(bid, ask) = getPrice(bid, ask, minSpread, false);
-        } else if (ask > upperBound) {
-            std::tie(bid, ask) = getPrice(bid, ask, minSpread, true);
+        OrderID id = ++nextID;
+        ob->addOrder(id, Type::Limit, Side::Buy, qty, price, Flag::None);
+        live.push_back(id);
+        operations += 1;
+
+        if (live.size() > static_cast<size_t>(depth)) {
+            ob->cancelOrder(live.front());
+            live.pop_front();
+            operations += 1;
         }
-
-        ob->cancelOrder(buyID);
-        ob->cancelOrder(sellID);
-        buyID = ++nextID;
-        sellID = ++nextID;
-        ob->addOrder(buyID, Type::Limit, Side::Buy, bidQty, bid, Flag::None);
-        ob->addOrder(sellID, Type::Limit, Side::Sell, askQty, ask, Flag::None);
-
-        operations += 4;  // 2 cancels + 2 adds
     }
 
     auto finish = std::chrono::steady_clock::now();
@@ -108,7 +111,7 @@ void throughput(int64_t seed, int duration, orderbook::Decimal lowerBound, order
     std::cout << "Avg latency: " << nanosecPerOp << " ns/op" << std::endl;
 }
 
-void run(int64_t seed, int duration, int pd, const std::string &lb, const std::string &ub, const std::string &ms, const std::string &n, bool sched) {
+void run(int64_t seed, int duration, int pd, int depth, const std::string &lb, const std::string &ub, const std::string &ms, const std::string &n, bool sched) {
     orderbook::Decimal lowerBound(lb);
     orderbook::Decimal upperBound(ub);
     orderbook::Decimal minSpread(ms);
@@ -116,7 +119,7 @@ void run(int64_t seed, int duration, int pd, const std::string &lb, const std::s
     if (n == "latency") {
         latency(seed, duration, pd, lowerBound, upperBound, minSpread, sched);
     } else if (n == "throughput") {
-        throughput(seed, duration, lowerBound, upperBound, minSpread);
+        throughput(seed, duration, depth, lowerBound, upperBound, minSpread);
     }
 }
 
@@ -127,11 +130,12 @@ int main(int argc, char *argv[]) {
     std::string ub = getCmdOption(argv, argv + argc, "-u", "100.0");
     std::string ms = getCmdOption(argv, argv + argc, "-m", "0.25");
     int pd = std::stoi(getCmdOption(argv, argv + argc, "-p", "10"));
+    int depth = std::stoi(getCmdOption(argv, argv + argc, "-depth", "50000"));
     bool sched = cmdOptionExists(argv, argv + argc, "-sched");
     std::string n = getCmdOption(argv, argv + argc, "-n", "latency");
 
     std::cout << "PID: " << getpid() << std::endl;
-    run(seed, duration, pd, lb, ub, ms, n, sched);
+    run(seed, duration, pd, depth, lb, ub, ms, n, sched);
     return 0;
 }
 

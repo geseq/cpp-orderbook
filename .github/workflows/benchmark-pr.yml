@@ -1,8 +1,11 @@
 name: "Benchmark PR"
 
-# Builds the throughput benchmark for the PR branch and for main, then posts a
-# side-by-side comparison comment. Throughput on hosted runners is noisy and not
-# performance-calibrated, so the numbers are informational only.
+# On each PR, runs BOTH benchmarks for the PR branch and for main and posts a
+# single combined comment:
+#   1. Realistic deep-book throughput (main.cpp, depth W=50000).
+#   2. The matching-engine-benchmark harness (perf mode, 5 scenarios).
+# Throughput on hosted runners is noisy and not performance-calibrated, so the
+# numbers are informational only; the harness correctness status is meaningful.
 
 on:
   pull_request:
@@ -13,13 +16,12 @@ permissions:
   pull-requests: write
 
 env:
-  # Centralise CPM downloads so the PR and base builds share one cache and Boost
-  # is fetched once instead of twice.
-  CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
+  BENCH_SHA: "77697a115e76a25a1e2aa886f555d55b87fcf052"
+  BENCH_URL: "https://github.com/flash1-dev/matching-engine-benchmark"
 
 jobs:
   benchmark:
-    name: Throughput comparison
+    name: Dual benchmark comparison
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -28,55 +30,193 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Cache CPM sources
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/.cpm-cache
-          key: cpm-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/CPM.cmake', 'package-lock.cmake') }}
-          restore-keys: |
-            cpm-${{ runner.os }}-
-
-      - name: Install locale
+      - name: Install dependencies
         run: |
-          # Boost comes from CPM, not the system: installing libboost-all-dev
-          # makes find_package use system Boost, whose Boost::intrusive target
-          # is gone under CMake's CMP0167. main.cpp also imbues
-          # std::locale("en_US.UTF-8"), which throws if the locale is absent.
+          # locales: main.cpp imbues std::locale("en_US.UTF-8"), which throws if
+          # the locale is absent. g++-14/cmake/libboost-all-dev are for the
+          # HARNESS only. The engine/adapter builds get Boost from CPM; system
+          # Boost must not leak into them (CMP0167 drops Boost::intrusive), so we
+          # never pass it to the `main` or adapter builds.
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends locales
+          sudo apt-get install -y --no-install-recommends \
+            locales g++-14 cmake libboost-all-dev
           sudo locale-gen en_US.UTF-8
 
-      - name: Build PR (Release)
+      - name: Clone benchmark harness at pinned SHA
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          git clone "$BENCH_URL" bench-harness
+          git -C bench-harness checkout "$BENCH_SHA"
+
+      - name: Build benchmark harness
+        run: |
+          cmake -S bench-harness -B bench-harness/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc-14 \
+            -DCMAKE_CXX_COMPILER=g++-14
+          cmake --build bench-harness/build -j
+
+      # ---- PR branch ---------------------------------------------------------
+      - name: Build PR realistic bench (Release)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_DISABLE_FIND_PACKAGE_Boost=ON
           cmake --build build -j --target main
 
-      - name: Run PR benchmark
+      - name: Run PR realistic bench
         run: |
           mkdir -p benchmarks
-          ./build/main -n throughput -duration 10 -seed 42 > benchmarks/pr.txt 2>&1
+          ./build/main -n throughput -duration 10 -depth 50000 -seed 42 \
+            > benchmarks/pr-realistic.txt 2>&1
 
-      - name: Build base (main, Release)
+      - name: Build PR adapter
+        run: |
+          BENCH_SRC="$PWD/bench-harness" ME_ENGINE_SRC="$PWD" bash bench/build.sh
+          ls -l bench/cpp_orderbook_adapter.so
+
+      - name: Run PR harness scenarios (perf)
+        working-directory: bench-harness
+        run: |
+          for scenario in static normal swing-25 swing-40 flash-crash; do
+            echo "::group::pr $scenario"
+            ./harness \
+              --engine "$GITHUB_WORKSPACE/bench/cpp_orderbook_adapter.so" \
+              --scenario "$scenario" \
+              --mode perf \
+              --matcher-core 2 \
+              --drainer-core 3 || true
+            echo "::endgroup::"
+          done
+          mkdir -p "$GITHUB_WORKSPACE/benchmarks/pr-harness"
+          if ls results/*.json >/dev/null 2>&1; then
+            mv results/*.json "$GITHUB_WORKSPACE/benchmarks/pr-harness/"
+          fi
+
+      # ---- base (main) -------------------------------------------------------
+      - name: Build base realistic bench (Release)
         run: |
           git worktree add ../base main
-          cmake -S ../base -B ../base/build -DCMAKE_BUILD_TYPE=Release
+          cmake -S ../base -B ../base/build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_DISABLE_FIND_PACKAGE_Boost=ON
           cmake --build ../base/build -j --target main
 
-      - name: Run base benchmark
+      - name: Run base realistic bench
         run: |
-          ../base/build/main -n throughput -duration 10 -seed 42 > benchmarks/base.txt 2>&1
+          ../base/build/main -n throughput -duration 10 -depth 50000 -seed 42 \
+            > benchmarks/base-realistic.txt 2>&1
 
-      - name: Build comparison
+      - name: Build base adapter
         run: |
-          {
-            echo "### This PR"
-            echo
-            cat benchmarks/pr.txt
-            echo
-            echo "### main (base)"
-            echo
-            cat benchmarks/base.txt
-          } > benchmarks/comparison.txt
+          BENCH_SRC="$PWD/bench-harness" ME_ENGINE_SRC="$PWD/../base" bash ../base/bench/build.sh
+          ls -l ../base/bench/cpp_orderbook_adapter.so
+
+      - name: Run base harness scenarios (perf)
+        working-directory: bench-harness
+        run: |
+          for scenario in static normal swing-25 swing-40 flash-crash; do
+            echo "::group::base $scenario"
+            ./harness \
+              --engine "$GITHUB_WORKSPACE/../base/bench/cpp_orderbook_adapter.so" \
+              --scenario "$scenario" \
+              --mode perf \
+              --matcher-core 2 \
+              --drainer-core 3 || true
+            echo "::endgroup::"
+          done
+          mkdir -p "$GITHUB_WORKSPACE/benchmarks/base-harness"
+          if ls results/*.json >/dev/null 2>&1; then
+            mv results/*.json "$GITHUB_WORKSPACE/benchmarks/base-harness/"
+          fi
+
+      # ---- report ------------------------------------------------------------
+      - name: Build combined report
+        run: |
+          python3 - <<'PY'
+          import glob, json, os, re
+
+          SCENARIOS = ["static", "normal", "swing-25", "swing-40", "flash-crash"]
+
+          def ops(path):
+              try:
+                  txt = open(path).read()
+              except OSError:
+                  return None
+              m = re.search(r"Throughput:\s*([\d,\.]+)\s*ops/sec", txt)
+              return float(m.group(1).replace(",", "")) if m else None
+
+          def load(dir_):
+              out = {}
+              for path in sorted(glob.glob(os.path.join(dir_, "*.json"))):
+                  try:
+                      data = json.load(open(path))
+                  except (OSError, ValueError):
+                      continue
+                  scen = data.get("scenario")
+                  if scen is None:
+                      base = os.path.basename(path)
+                      scen = next((s for s in SCENARIOS if f"_{s}_" in base), None)
+                  if scen:
+                      out[scen] = data
+              return out
+
+          def throughput(d):
+              v = (d or {}).get("throughput_msgs_per_s")
+              try:
+                  return float(v)
+              except (TypeError, ValueError):
+                  return None
+
+          def correctness(d):
+              return (d or {}).get("correctness", {}).get("status", "MISSING")
+
+          def pct(pr, base):
+              if pr is None or base is None or base == 0:
+                  return "n/a"
+              return f"{(pr / base - 1) * 100:+.1f}%"
+
+          def fmt_ops(v):
+              return f"{v:,.0f}" if v is not None else "n/a"
+
+          def fmt_m(v):
+              return f"{v / 1e6:.3f}" if v is not None else "n/a"
+
+          pr_ops = ops("benchmarks/pr-realistic.txt")
+          base_ops = ops("benchmarks/base-realistic.txt")
+          pr_h = load("benchmarks/pr-harness")
+          base_h = load("benchmarks/base-harness")
+
+          lines = []
+          lines.append("<!-- benchmark-pr -->")
+          lines.append("## Benchmark PR")
+          lines.append("")
+          lines.append("_Throughput on hosted runners is noisy and not "
+                       "performance-calibrated; treat the numbers as "
+                       "informational only._")
+          lines.append("")
+          lines.append("### Realistic deep-book throughput (W=50000)")
+          lines.append("")
+          lines.append("| Metric | PR | main | change |")
+          lines.append("|---|---|---|---|")
+          lines.append(f"| ops/sec | {fmt_ops(pr_ops)} | {fmt_ops(base_ops)} | "
+                       f"{pct(pr_ops, base_ops)} |")
+          lines.append("")
+          lines.append("### Matching-engine-benchmark (perf mode)")
+          lines.append("")
+          lines.append(f"Harness pinned at `{os.environ.get('BENCH_SHA', '?')}`.")
+          lines.append("")
+          lines.append("| Scenario | PR (M msgs/s) | main (M msgs/s) | change | "
+                       "PR correctness |")
+          lines.append("|---|---|---|---|---|")
+          for scen in SCENARIOS:
+              p, b = pr_h.get(scen), base_h.get(scen)
+              pt, bt = throughput(p), throughput(b)
+              lines.append(f"| {scen} | {fmt_m(pt)} | {fmt_m(bt)} | "
+                           f"{pct(pt, bt)} | {correctness(p)} |")
+
+          body = "\n".join(lines) + "\n"
+          with open("benchmarks/report.md", "w") as fh:
+              fh.write(body)
+          print(body)
+          PY
 
       - name: Comment PR
         uses: actions/github-script@v6
@@ -84,11 +224,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const results = fs.readFileSync('benchmarks/comparison.txt', 'utf8');
+            const body = fs.readFileSync('benchmarks/report.md', 'utf8');
             const marker = '<!-- benchmark-pr -->';
-            const body = marker + '\n## Throughput Benchmark\n\n'
-              + '_Throughput on hosted runners is noisy and not performance-calibrated; treat as informational only._\n\n'
-              + '```\n' + results + '\n```';
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
             const comments = await github.paginate(github.rest.issues.listComments, {
