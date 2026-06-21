@@ -1,29 +1,28 @@
 #pragma once
 
 #include <cstdint>
-#include <map>
 #include <sstream>
 #include <utility>
 
-#include "boost/intrusive/rbtree.hpp"
 #include "object_pool.hpp"
+#include "order_index.hpp"
 #include "pricelevel.hpp"
 #include "types.hpp"
 #include "util.hpp"
 
 namespace orderbook {
 
-using OrderMap = boost::intrusive::rbtree<Order, CmpLess>;
+using OrderMap = index::FibHashIndex;
 
 template <class Notification>
 class OrderBook {
    public:
-    OrderBook(NotificationInterface<Notification>& n, size_t price_level_pool_size = 16384, size_t order_pool_size = 16384)
+    OrderBook(NotificationInterface<Notification>& n, size_t price_level_pool_size = 16384, size_t order_pool_size = 16384, size_t order_index_reserve = 16384)
         : order_pool_(order_pool_size),
           notification_(static_cast<Notification&>(n)),
           bids_(PriceLevel<PriceType::Bid>(price_level_pool_size)),
           asks_(PriceLevel<PriceType::Ask>(price_level_pool_size)),
-          orders_(OrderMap()){};
+          orders_(order_index_reserve) {};
 
     void addOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
     void putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price);
@@ -112,7 +111,7 @@ void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal
     }
 
     if (type != Type::Market) {
-        if (orders_.find(id, orderbook::OrderIDCompare()) != orders_.end()) {
+        if (orders_.contains(id)) {
             notification_.onExecutionReport(ExecutionReport{
                 .exec_type = ExecType::Rejected,
                 .msg_type = MsgType::CreateOrder,
@@ -189,7 +188,7 @@ void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Dec
             asks_.append(o);
         }
 
-        orders_.insert_equal(*o);
+        orders_.insert(id, o);
     }
 
     return;
@@ -236,15 +235,13 @@ void OrderBook<Notification>::cancelOrder(OrderID id) {
 
 template <class Notification>
 std::pair<Decimal, Decimal> OrderBook<Notification>::eraseOrder(OrderID id) {
-    auto it = orders_.find(id, OrderIDCompare());
-    if (it == orders_.end()) {
+    auto* order = orders_.erase(id);
+    if (order == nullptr) {
         return {uint64_t(0), uint64_t(0)};
     }
 
     auto& pool = order_pool_;
-    auto* order = &*it;
     scope_exit defer([&pool, &order]() { pool.release(order); });
-    orders_.erase(*it);
 
     if (order->side == Side::Buy) {
         bids_.remove(order);
@@ -257,7 +254,7 @@ std::pair<Decimal, Decimal> OrderBook<Notification>::eraseOrder(OrderID id) {
 
 template <class Notification>
 bool OrderBook<Notification>::hasOrder(OrderID id) {
-    return orders_.find(id, OrderIDCompare()) != orders_.end();
+    return orders_.contains(id);
 }
 
 template <class Notification>
