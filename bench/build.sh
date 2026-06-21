@@ -14,6 +14,9 @@
 # Overrides:
 #   BENCH_SRC=/path/to/existing/matching-engine-benchmark   (skip the clone)
 #   ME_ENGINE_SRC=/path/to/cpp-orderbook                    (default: this repo)
+#   ME_EXTRA_CXXFLAGS="..."  extra flags appended to the adapter g++ command
+#                            (default empty => identical behavior). Used by the
+#                            sanitizer CI to inject e.g. -fsanitize=address.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -110,6 +113,7 @@ g++ -std=c++20 -O3 -march=native -fPIC -shared \
     "$ENGINE/src/order.cpp" \
     "$ENGINE/src/types.cpp" \
     -pthread \
+    ${ME_EXTRA_CXXFLAGS:-} \
     -o "$OUT"
 
 echo "built: $OUT"
