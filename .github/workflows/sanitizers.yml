@@ -1,0 +1,109 @@
+# Sanitizers
+#
+# Runs the matching-engine-benchmark corpus (5 scenarios) under ASan, UBSan and
+# TSan as SEPARATE matrix stages. The gate here is "no sanitizer report" — the
+# correctness consensus-hash is gated by benchmark-comparison.yml, not here, so
+# we run a reduced --count under instrumentation to keep runtime sane.
+#
+#   Benchmark harness : https://github.com/flash1-dev/matching-engine-benchmark
+#   Pinned SHA        : 77697a115e76a25a1e2aa886f555d55b87fcf052
+#   License           : MIT
+name: "Sanitizers"
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  BENCH_SHA: "77697a115e76a25a1e2aa886f555d55b87fcf052"
+  BENCH_URL: "https://github.com/flash1-dev/matching-engine-benchmark"
+  SAN_COUNT: "200000"
+
+jobs:
+  sanitize:
+    name: "Sanitizer (${{ matrix.sanitizer }})"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, undefined, thread]
+    steps:
+      - name: Checkout cpp-orderbook
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 gcc-14 cmake libboost-all-dev \
+            libasan8 libubsan1 libtsan2
+
+      - name: Clone benchmark harness at pinned SHA
+        run: |
+          git clone "$BENCH_URL" bench-harness
+          git -C bench-harness checkout "$BENCH_SHA"
+
+      - name: Build benchmark harness (instrumented)
+        run: |
+          cmake -S bench-harness -B bench-harness/build \
+            -DCMAKE_C_COMPILER=gcc-14 \
+            -DCMAKE_CXX_COMPILER=g++-14 \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_CXX_FLAGS="-fsanitize=${{ matrix.sanitizer }} -fno-omit-frame-pointer -g" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=${{ matrix.sanitizer }}"
+          cmake --build bench-harness/build -j
+
+      - name: Build cpp-orderbook adapter (instrumented)
+        run: |
+          ME_EXTRA_CXXFLAGS="-fsanitize=${{ matrix.sanitizer }} -fno-omit-frame-pointer -g" \
+          BENCH_SRC="$PWD/bench-harness" \
+          ME_ENGINE_SRC="$PWD" \
+          bash bench/build.sh
+          ls -l bench/cpp_orderbook_adapter.so
+
+      - name: Run corpus under sanitizer
+        working-directory: bench-harness
+        env:
+          ASAN_OPTIONS: "halt_on_error=1:abort_on_error=1:detect_leaks=1"
+          UBSAN_OPTIONS: "halt_on_error=1:abort_on_error=1:print_stacktrace=1"
+          TSAN_OPTIONS: "halt_on_error=1:abort_on_error=1:second_deadlock_stack=1:suppressions=${{ github.workspace }}/.github/tsan-suppressions.txt"
+        run: |
+          fail=0
+          for scenario in static normal swing-25 swing-40 flash-crash; do
+            echo "::group::${{ matrix.sanitizer }} $scenario"
+            log="san_${scenario}.log"
+            # The harness legitimately exits non-zero on the runner (audit
+            # skipped, reduced --count so the consensus hash != the count=1e6
+            # reference, core-pinning), which is NOT a sanitizer finding. So we
+            # ignore its exit code (`|| true`) and gate ONLY on sanitizer
+            # output: the sanitizers run with abort_on_error/halt_on_error, so a
+            # real finding prints one of the patterns below.
+            ./harness \
+                --engine "$GITHUB_WORKSPACE/bench/cpp_orderbook_adapter.so" \
+                --scenario "$scenario" \
+                --mode perf \
+                --count "$SAN_COUNT" \
+                --matcher-core 2 \
+                --drainer-core 3 2>&1 | tee "$log" || true
+            if grep -Eq "ERROR: AddressSanitizer|ERROR: LeakSanitizer|runtime error:|WARNING: ThreadSanitizer|SUMMARY: .*Sanitizer" "$log"; then
+              echo "::error::${{ matrix.sanitizer }} sanitizer report in $scenario"
+              fail=1
+            fi
+            echo "::endgroup::"
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "Sanitizer gate FAILED for ${{ matrix.sanitizer }}."
+            exit 1
+          fi
+          echo "Sanitizer gate passed for ${{ matrix.sanitizer }}: no findings."
+
+      - name: Upload sanitizer logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-logs-${{ matrix.sanitizer }}
+          path: bench-harness/san_*.log

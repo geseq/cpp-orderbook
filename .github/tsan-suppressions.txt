@@ -1,0 +1,11 @@
+# ThreadSanitizer suppressions — HARNESS / BOOST INTERNALS ONLY.
+#
+# The benchmark harness moves reports between its matcher and drainer threads
+# over a boost::lockfree::spsc_queue (src/transport.cpp). That lock-free queue
+# uses relaxed/acquire-release atomics that TSan cannot always prove correct,
+# producing benign data-race reports inside boost::lockfree. These are NOT in
+# our engine/adapter code, so suppress only the boost::lockfree namespace.
+#
+# Do NOT add suppressions for cpp-orderbook engine or adapter symbols — we want
+# real races in our report-push path to FAIL the job.
+race:boost::lockfree
