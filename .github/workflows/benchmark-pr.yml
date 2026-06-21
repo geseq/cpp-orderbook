@@ -1,0 +1,104 @@
+name: "Benchmark PR"
+
+# Builds the throughput benchmark for the PR branch and for main, then posts a
+# side-by-side comparison comment. Throughput on hosted runners is noisy and not
+# performance-calibrated, so the numbers are informational only.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  # Centralise CPM downloads so the PR and base builds share one cache and Boost
+  # is fetched once instead of twice.
+  CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
+
+jobs:
+  benchmark:
+    name: Throughput comparison
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cpm-cache
+          key: cpm-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/CPM.cmake', 'package-lock.cmake') }}
+          restore-keys: |
+            cpm-${{ runner.os }}-
+
+      - name: Install locale
+        run: |
+          # Boost comes from CPM, not the system: installing libboost-all-dev
+          # makes find_package use system Boost, whose Boost::intrusive target
+          # is gone under CMake's CMP0167. main.cpp also imbues
+          # std::locale("en_US.UTF-8"), which throws if the locale is absent.
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends locales
+          sudo locale-gen en_US.UTF-8
+
+      - name: Build PR (Release)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j --target main
+
+      - name: Run PR benchmark
+        run: |
+          mkdir -p benchmarks
+          ./build/main -n throughput -duration 10 -seed 42 > benchmarks/pr.txt 2>&1
+
+      - name: Build base (main, Release)
+        run: |
+          git worktree add ../base main
+          cmake -S ../base -B ../base/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build ../base/build -j --target main
+
+      - name: Run base benchmark
+        run: |
+          ../base/build/main -n throughput -duration 10 -seed 42 > benchmarks/base.txt 2>&1
+
+      - name: Build comparison
+        run: |
+          {
+            echo "### This PR"
+            echo
+            cat benchmarks/pr.txt
+            echo
+            echo "### main (base)"
+            echo
+            cat benchmarks/base.txt
+          } > benchmarks/comparison.txt
+
+      - name: Comment PR
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const results = fs.readFileSync('benchmarks/comparison.txt', 'utf8');
+            const marker = '<!-- benchmark-pr -->';
+            const body = marker + '\n## Throughput Benchmark\n\n'
+              + '_Throughput on hosted runners is noisy and not performance-calibrated; treat as informational only._\n\n'
+              + '```\n' + results + '\n```';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number,
+            });
+            const existing = comments.find(
+              (c) => c.user.login === 'github-actions[bot]' && c.body.includes(marker)
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
