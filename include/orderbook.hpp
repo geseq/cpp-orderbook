@@ -240,16 +240,16 @@ std::pair<Decimal, Decimal> OrderBook<Notification>::eraseOrder(OrderID id) {
         return {uint64_t(0), uint64_t(0)};
     }
 
-    auto& pool = order_pool_;
-    scope_exit defer([&pool, &order]() { pool.release(order); });
-
+    const Decimal qty = order->qty;
+    const Decimal original_qty = order->original_qty;
     if (order->side == Side::Buy) {
         bids_.remove(order);
-        return {order->qty, order->original_qty};
+    } else {
+        asks_.remove(order);
     }
 
-    asks_.remove(order);
-    return {order->qty, order->original_qty};
+    order_pool_.release(order);
+    return {qty, original_qty};
 }
 
 template <class Notification>
