@@ -36,12 +36,14 @@ jobs:
           restore-keys: |
             cpm-${{ runner.os }}-
 
-      - name: Install dependencies
+      - name: Install locale
         run: |
+          # Boost comes from CPM, not the system: installing libboost-all-dev
+          # makes find_package use system Boost, whose Boost::intrusive target
+          # is gone under CMake's CMP0167. main.cpp also imbues
+          # std::locale("en_US.UTF-8"), which throws if the locale is absent.
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            g++ cmake libboost-all-dev locales
-          # main.cpp imbues std::locale("en_US.UTF-8"); it throws if absent.
+          sudo apt-get install -y --no-install-recommends locales
           sudo locale-gen en_US.UTF-8
 
       - name: Build PR (Release)
