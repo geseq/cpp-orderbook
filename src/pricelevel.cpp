@@ -52,7 +52,7 @@ void PriceLevel<P>::remove(Order* order) {
     }
 
     if (q->len() == 0) {
-        price_tree_.erase(q->price());
+        price_tree_.erase(price_tree_.iterator_to(*q));
         --depth_;
         queue_pool_.release(&*q);
     }
