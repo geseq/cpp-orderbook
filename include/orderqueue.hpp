@@ -1,17 +1,17 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 
 #include "boost/intrusive/list.hpp"
 #include "boost/intrusive/set_hook.hpp"
+#include "function_ref.hpp"
 #include "order.hpp"
 
 namespace orderbook {
 
 using TradeNotification =
-    std::function<void(OrderID mOrderID, OrderID tOrderID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty, Decimal price)>;
-using PostOrderFill = std::function<void(OrderID canceledOrderID)>;
+    function_ref<void(OrderID mOrderID, OrderID tOrderID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty, Decimal price)>;
+using PostOrderFill = function_ref<void(OrderID canceledOrderID)>;
 
 using OrderList = boost::intrusive::list<Order>;
 

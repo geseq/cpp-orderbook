@@ -54,9 +54,9 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessUpdatesTotalQtyOnFullFill) {
     oq->append(&o1);
     oq->append(&o2);
 
-    const TradeNotification tn = [](OrderID makerOrderID, OrderID takerOrderID, OrderStatus makerOrderStatus, OrderStatus takerOrderStatus, Decimal matchedQty,
+    const auto tn = [](OrderID makerOrderID, OrderID takerOrderID, OrderStatus makerOrderStatus, OrderStatus takerOrderStatus, Decimal matchedQty,
                                     Decimal matchedPrice) {};
-    const PostOrderFill pf = [&oq, &o1, &o2](OrderID id) {
+    const auto pf = [&oq, &o1, &o2](OrderID id) {
         if (id == 1) {
             oq->remove(&o1);
         } else if (id == 2) {
@@ -84,9 +84,9 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessUpdatesTotalQtyOnExactFill) {
     oq->append(&o1);
     oq->append(&o2);
 
-    const TradeNotification tn = [](OrderID makerOrderID, OrderID takerOrderID, OrderStatus makerOrderStatus, OrderStatus takerOrderStatus, Decimal matchedQty,
+    const auto tn = [](OrderID makerOrderID, OrderID takerOrderID, OrderStatus makerOrderStatus, OrderStatus takerOrderStatus, Decimal matchedQty,
                                     Decimal matchedPrice) {};
-    const PostOrderFill pf = [&oq, &o1, &o2](OrderID id) {
+    const auto pf = [&oq, &o1, &o2](OrderID id) {
         if (id == 1) {
             oq->remove(&o1);
         } else if (id == 2) {
@@ -112,9 +112,9 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessZeroesFilledOrderBeforePostFill) {
     oq->append(&o2);
 
     bool sawZeroQtyOnPostFill = false;
-    const TradeNotification tn = [](OrderID makerOrderID, OrderID takerOrderID, OrderStatus makerOrderStatus, OrderStatus takerOrderStatus, Decimal matchedQty,
+    const auto tn = [](OrderID makerOrderID, OrderID takerOrderID, OrderStatus makerOrderStatus, OrderStatus takerOrderStatus, Decimal matchedQty,
                                     Decimal matchedPrice) {};
-    const PostOrderFill pf = [&oq, &o1, &o2, &sawZeroQtyOnPostFill](OrderID id) {
+    const auto pf = [&oq, &o1, &o2, &sawZeroQtyOnPostFill](OrderID id) {
         if (id == 1) {
             sawZeroQtyOnPostFill = (o1.qty == Decimal(0, 0));
             oq->remove(&o1);
@@ -146,12 +146,12 @@ TEST_F(OrderQueueTest, TestOrderQueue_ProcessUsesSnapshotForTradeNotificationAft
 
     OrderID makerOrderID = 0;
     Decimal matchedPrice(0, 0);
-    const TradeNotification tn = [&makerOrderID, &matchedPrice](OrderID makerID, OrderID takerOrderID, OrderStatus makerOrderStatus,
+    const auto tn = [&makerOrderID, &matchedPrice](OrderID makerID, OrderID takerOrderID, OrderStatus makerOrderStatus,
                                                                 OrderStatus takerOrderStatus, Decimal matchedQty, Decimal priceValue) {
         makerOrderID = makerID;
         matchedPrice = priceValue;
     };
-    const PostOrderFill pf = [&oq, &o1](OrderID id) {
+    const auto pf = [&oq, &o1](OrderID id) {
         if (id == 1) {
             oq->remove(&o1);
             o1.id = 999;
