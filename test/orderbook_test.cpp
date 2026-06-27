@@ -6,21 +6,32 @@
 #include <tuple>
 #include <vector>
 
+#include "rbtree_levels.hpp"
 #include "util.cpp"
+
+// Level-store policy under test. Defaults to ArrayLevels; a parallel CMake
+// target compiles this same file with -DOB_TEST_LEVELS=::orderbook::RbTreeLevels
+// so every case below runs against BOTH backends.
+#ifndef OB_TEST_LEVELS
+#define OB_TEST_LEVELS ::orderbook::ArrayLevels
+#endif
+template <orderbook::PriceType P>
+using TestLevels = OB_TEST_LEVELS<P>;
+using TestBook = orderbook::OrderBook<Notification, TestLevels>;
 
 class LimitOrderTest : public ::testing::Test {
    protected:
     Notification n;
-    std::shared_ptr<OrderBook<Notification>> ob;
+    std::shared_ptr<TestBook> ob;
 
     void SetUp() override {
         n = Notification();
-        ob = std::make_shared<orderbook::OrderBook<Notification>>(n);
+        ob = std::make_shared<TestBook>(n);
     }
 
     void TearDown() override {}
 
-    void processLine(std::shared_ptr<OrderBook<Notification>>& ob, const std::string& line) {
+    void processLine(std::shared_ptr<TestBook>& ob, const std::string& line) {
         std::vector<std::string> parts;
         boost::split(parts, line, boost::is_any_of("\t"));
         if (parts.empty()) {
@@ -44,7 +55,7 @@ class LimitOrderTest : public ::testing::Test {
         ob->addOrder(oid, type, side, qty, price, flag);
     }
 
-    void processOrders(std::shared_ptr<OrderBook<Notification>>& ob, const std::string& input, int prefix) {
+    void processOrders(std::shared_ptr<TestBook>& ob, const std::string& input, int prefix) {
         std::stringstream ss(input);
         std::string line;
 
@@ -60,7 +71,7 @@ class LimitOrderTest : public ::testing::Test {
         }
     }
 
-    void addDepth(std::shared_ptr<OrderBook<Notification>>& ob, int prefix = 0) {
+    void addDepth(std::shared_ptr<TestBook>& ob, int prefix = 0) {
         const static std::string depth = R"(
 # add depth to the orderbook
 1	L	B	2	50	N

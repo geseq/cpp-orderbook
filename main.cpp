@@ -69,7 +69,13 @@ void throughput(int64_t seed, int duration, int depth, orderbook::Decimal lowerB
     // ~depth deep and we measure the add/cancel/index/pool path at realistic
     // depth. All orders rest on the bid side (no asks) so nothing ever crosses.
     auto n = orderbook::EmptyNotification();
-    auto ob = std::make_unique<orderbook::OrderBook<orderbook::EmptyNotification>>(n);
+    // Tick-indexed price levels (perf/lever-b prototype): prices = 50.00 + k*0.25,
+    // fp = 5000000000 + k*25000000, k in [0,200). With base_fp = 0 these map to
+    // ticks 200..400, so an initial 512-tick grid covers them with headroom (no
+    // growth). The grid grows on demand for any price outside this range.
+    //   base_fp = 0, tick_fp = 25000000, num_ticks = 512.
+    auto ob = std::make_unique<orderbook::OrderBook<orderbook::EmptyNotification>>(n, 16384, 16384, 16384, /*base_fp=*/0ULL, /*tick_fp=*/25000000ULL,
+                                                                                   /*num_ticks=*/512);
 
     orderbook::Decimal qty(10, 0);
     // Spread prices across the band on a minSpread tick grid.

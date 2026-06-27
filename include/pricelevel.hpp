@@ -1,14 +1,11 @@
 #pragma once
 
-#include <functional>
-#include <map>
+#include <cstddef>
+#include <cstdint>
 
-#include "boost/intrusive/intrusive_fwd.hpp"
-#include "boost/intrusive/list.hpp"
-#include "boost/intrusive/rbtree.hpp"
-#include "object_pool.hpp"
+#include "array_levels.hpp"
+#include "level_store.hpp"
 #include "orderqueue.hpp"
-#include "pool.hpp"
 #include "types.hpp"
 
 namespace orderbook {
@@ -19,24 +16,24 @@ class Compare {
     bool GreaterThanOrEqual(Decimal price);
 };
 
-using CmpGreater = boost::intrusive::compare<std::greater<>>;
-using CmpLess = boost::intrusive::compare<std::less<>>;
-
-template <PriceType P>
+// PriceLevel owns the per-side level accounting (volume_ / num_orders_) and the
+// matching loops (processMarketOrder / processLimitOrder). The price-level
+// CONTAINER itself is a compile-time policy `Store` (a LevelStore backend over
+// PriceType P): ArrayLevels<P> (default, tick array + bitmap) or RbTreeLevels<P>
+// (boost::intrusive::rbtree). All store methods are header-defined and inline,
+// so there is no virtual dispatch on the hot path and the matching logic is
+// shared by both backends rather than duplicated.
+template <PriceType P, class Store = ArrayLevels<P>>
 class PriceLevel {
-    pool::ObjectPool<OrderQueue> queue_pool_;
-
-    using CompareType = std::conditional_t<P == PriceType::Bid, CmpGreater, CmpLess>;
-    using PriceTree = boost::intrusive::rbtree<OrderQueue, CompareType>;
-    PriceTree price_tree_;
+    Store store_;
 
     PriceType price_type_ = P;
     Decimal volume_;
     uint64_t num_orders_ = 0;
-    uint64_t depth_ = 0;
 
    public:
-    PriceLevel(size_t price_level_pool_size) : queue_pool_(price_level_pool_size){};
+    explicit PriceLevel(const LevelStoreConfig& cfg) : store_(cfg) {}
+
     uint64_t len();
     uint64_t depth();
     Decimal volume();
@@ -55,9 +52,6 @@ class PriceLevel {
 
     template <PriceType Q = P>
     Decimal processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal price, Decimal qty, Flag flag);
-
-    const PriceTree& price_tree() const { return price_tree_; };
 };
 
 }  // namespace orderbook
-

@@ -7,7 +7,18 @@
 #include <tuple>
 #include <vector>
 
+#include "rbtree_levels.hpp"
 #include "util.cpp"
+
+// Level-store policy under test. Defaults to ArrayLevels; a parallel CMake
+// target compiles this same file with -DOB_TEST_LEVELS=::orderbook::RbTreeLevels
+// so every case below runs against BOTH backends.
+#ifndef OB_TEST_LEVELS
+#define OB_TEST_LEVELS ::orderbook::ArrayLevels
+#endif
+template <orderbook::PriceType P>
+using TestLevels = OB_TEST_LEVELS<P>;
+using TestBook = orderbook::OrderBook<Notification, TestLevels>;
 
 class DeterminismTest : public ::testing::Test {
    protected:
@@ -23,7 +34,7 @@ class DeterminismTest : public ::testing::Test {
         bool matching = true;
     };
 
-    static void applyAction(const Action& action, const std::shared_ptr<OrderBook<Notification>>& localOb) {
+    static void applyAction(const Action& action, const std::shared_ptr<TestBook>& localOb) {
         if (action.kind == Action::Kind::SetMatching) {
             localOb->setMatching(action.matching);
         } else if (action.kind == Action::Kind::Cancel) {
@@ -35,7 +46,7 @@ class DeterminismTest : public ::testing::Test {
 
     static std::tuple<std::vector<std::string>, std::string, Decimal> runSequence(const std::vector<Action>& actions) {
         Notification notification;
-        auto localOb = std::make_shared<orderbook::OrderBook<Notification>>(notification);
+        auto localOb = std::make_shared<TestBook>(notification);
         for (const auto& action : actions) {
             applyAction(action, localOb);
         }
@@ -148,8 +159,8 @@ TEST_F(DeterminismTest, ReplayProducesSameExecutionTraceAndBookState) {
 TEST_F(DeterminismTest, IndependentBooksStayIsolated) {
     Notification n1;
     Notification n2;
-    auto ob1 = std::make_shared<orderbook::OrderBook<Notification>>(n1);
-    auto ob2 = std::make_shared<orderbook::OrderBook<Notification>>(n2);
+    auto ob1 = std::make_shared<TestBook>(n1);
+    auto ob2 = std::make_shared<TestBook>(n2);
 
     ob1->addOrder(1000, Type::Limit, Side::Buy, Decimal(2, 0), Decimal(100, 0), Flag::None);
     ob1->addOrder(1001, Type::Limit, Side::Sell, Decimal(2, 0), Decimal(100, 0), Flag::None);
@@ -167,7 +178,7 @@ TEST_F(DeterminismTest, RecoverAtEveryMidpointThenReplaySuffix) {
 
     for (size_t split = 0; split <= actions.size(); ++split) {
         Notification baselineN;
-        auto baselineOb = std::make_shared<orderbook::OrderBook<Notification>>(baselineN);
+        auto baselineOb = std::make_shared<TestBook>(baselineN);
         for (size_t i = 0; i < split; ++i) {
             applyAction(actions[i], baselineOb);
         }
@@ -183,7 +194,7 @@ TEST_F(DeterminismTest, RecoverAtEveryMidpointThenReplaySuffix) {
         const auto baselineFinalLastPrice = baselineOb->last_price;
 
         Notification recoveredN;
-        auto recoveredOb = std::make_shared<orderbook::OrderBook<Notification>>(recoveredN);
+        auto recoveredOb = std::make_shared<TestBook>(recoveredN);
         for (size_t i = 0; i < split; ++i) {
             applyAction(actions[i], recoveredOb);
         }
@@ -234,10 +245,10 @@ TEST_F(DeterminismTest, TwoCopiesPerMarketRemainDeterministicWithDifferentInterl
     Notification nA2;
     Notification nB1;
     Notification nB2;
-    auto obA1 = std::make_shared<orderbook::OrderBook<Notification>>(nA1);
-    auto obA2 = std::make_shared<orderbook::OrderBook<Notification>>(nA2);
-    auto obB1 = std::make_shared<orderbook::OrderBook<Notification>>(nB1);
-    auto obB2 = std::make_shared<orderbook::OrderBook<Notification>>(nB2);
+    auto obA1 = std::make_shared<TestBook>(nA1);
+    auto obA2 = std::make_shared<TestBook>(nA2);
+    auto obB1 = std::make_shared<TestBook>(nB1);
+    auto obB2 = std::make_shared<TestBook>(nB2);
 
     const size_t maxActions = std::max(marketA.size(), marketB.size());
     for (size_t i = 0; i < maxActions; ++i) {
