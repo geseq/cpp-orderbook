@@ -59,6 +59,19 @@ if (ENABLE_TESTING)
         add_test(${test_name} ${test_name})
         set_property(TEST ${test_name} PROPERTY LABELS "test")
     ENDFOREACH ()
+
+    # Parallel targets that recompile the orderbook + determinism suites against
+    # the RbTreeLevels backend (the default targets above cover ArrayLevels), so
+    # BOTH level-store backends are exercised by the same assertions.
+    FOREACH (rb_test orderbook_test.cpp determinism_test.cpp)
+        set(rb_name ${rb_test}_rbtree)
+        message("Adding test: " ${rb_name})
+        add_executable(${rb_name} ${SOURCES} ${PROJECT_SOURCE_DIR}/test/${rb_test})
+        target_compile_definitions(${rb_name} PRIVATE OB_TEST_LEVELS=::orderbook::RbTreeLevels)
+        target_link_libraries(${rb_name} PRIVATE ${CMAKE_THREAD_LIBS_INIT} ${CPP_ORDERBOOK} gtest gtest_main Boost::algorithm Boost::intrusive decimal pool)
+        add_test(${rb_name} ${rb_name})
+        set_property(TEST ${rb_name} PROPERTY LABELS "test")
+    ENDFOREACH ()
 endif()
 
 target_link_libraries(main PRIVATE ${CPP_ORDERBOOK} Boost::intrusive decimal pool)

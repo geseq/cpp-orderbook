@@ -1,42 +1,35 @@
 #include "pricelevel.hpp"
 
-#include <sys/types.h>
-
-#include <cassert>
 #include <cstdint>
-#include <cwchar>
-#include <functional>
-#include <map>
-#include <memory>
-#include <string>
-#include <type_traits>
+
+#include "array_levels.hpp"
+#include "rbtree_levels.hpp"
 
 namespace orderbook {
 
-template <PriceType P>
-uint64_t PriceLevel<P>::len() {
+// All logic below is COMMON to every LevelStore backend: it routes container
+// operations through store_ and keeps the volume_ / num_orders_ accounting and
+// the matching loops in one place. The store (ArrayLevels / RbTreeLevels) only
+// owns the price-level container and the OrderQueue pool.
+
+template <PriceType P, class Store>
+uint64_t PriceLevel<P, Store>::len() {
     return num_orders_;
 }
 
-template <PriceType P>
-uint64_t PriceLevel<P>::depth() {
-    return depth_;
+template <PriceType P, class Store>
+uint64_t PriceLevel<P, Store>::depth() {
+    return store_.depth();
 }
 
-template <PriceType P>
-Decimal PriceLevel<P>::volume() {
+template <PriceType P, class Store>
+Decimal PriceLevel<P, Store>::volume() {
     return volume_;
 }
 
-template <PriceType P>
-void PriceLevel<P>::append(Order* order) {
-    auto it = price_tree_.find(order->price);
-    auto q = &*it;
-    if (it == price_tree_.end()) {
-        q = queue_pool_.acquire(order->price);
-        price_tree_.insert_equal(*q);
-        ++depth_;
-    }
+template <PriceType P, class Store>
+void PriceLevel<P, Store>::append(Order* order) {
+    OrderQueue* q = store_.findOrCreate(order->price);
 
     ++num_orders_;
     volume_ += order->qty;
@@ -44,36 +37,29 @@ void PriceLevel<P>::append(Order* order) {
     q->append(order);
 }
 
-template <PriceType P>
-void PriceLevel<P>::remove(Order* order) {
-    auto q = order->queue;
+template <PriceType P, class Store>
+void PriceLevel<P, Store>::remove(Order* order) {
+    // Use the order's queue back-pointer (set on append); backend-agnostic.
+    OrderQueue* q = order->queue;
     if (q != nullptr) {
         q->remove(order);
-    }
-
-    if (q->len() == 0) {
-        price_tree_.erase(price_tree_.iterator_to(*q));
-        --depth_;
-        queue_pool_.release(&*q);
+        if (q->len() == 0) {
+            store_.erase(q);
+        }
     }
 
     --num_orders_;
     volume_ -= order->qty;
 }
 
-template <PriceType P>
-OrderQueue* PriceLevel<P>::getQueue() {
-    auto q = price_tree_.begin();
-    if (q != price_tree_.end()) {
-        return &*q;
-    }
-
-    return nullptr;
+template <PriceType P, class Store>
+OrderQueue* PriceLevel<P, Store>::getQueue() {
+    return store_.best();
 }
 
-template <PriceType P>
+template <PriceType P, class Store>
 template <PriceType Q>
-Decimal PriceLevel<P>::processMarketOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal qty, Flag flag) {
+Decimal PriceLevel<P, Store>::processMarketOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal qty, Flag flag) {
     static_assert(Q == PriceType::Bid || Q == PriceType::Ask, "Unsupported PriceType");
 
     if ((flag & (AoN | FoK)) != 0 && qty > volume_) {
@@ -93,9 +79,9 @@ Decimal PriceLevel<P>::processMarketOrder(const TradeNotification& tn, const Pos
     return qtyProcessed;
 };
 
-template <PriceType P>
+template <PriceType P, class Store>
 template <PriceType Q>
-Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal price, Decimal qty, Flag flag) {
+Decimal PriceLevel<P, Store>::processLimitOrder(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID, Decimal price, Decimal qty, Flag flag) {
     static_assert(Q == PriceType::Bid || Q == PriceType::Ask, "Unsupported PriceType");
     Decimal qtyProcessed = {};
     auto orderQueue = getQueue();
@@ -104,7 +90,7 @@ Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const Post
         return qtyProcessed;
     }
 
-    if constexpr (std::is_same_v<CompareType, CmpGreater>) {
+    if constexpr (P == PriceType::Bid) {
         if (price > orderQueue->price()) {
             return qtyProcessed;
         }
@@ -116,6 +102,7 @@ Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const Post
 
     // AoN/FoK pre-check: only continue when aggregate fillable volume exists at eligible price levels.
     // Matched quantity is accounted for incrementally via volume_ -= result in the execution loop below.
+    // The best-to-worst walk uses getQueue() + getNextQueue(), so it is backend-agnostic.
     if (flag & (AoN | FoK)) {
         if (qty > volume()) {
             return Decimal{};
@@ -123,24 +110,21 @@ Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const Post
 
         bool canFill = false;
         auto aQty = qty;
-        if constexpr (std::is_same_v<CompareType, CmpGreater>) {
-            // Bid tree is descending (best = highest). Accumulate from bids >= sell limit.
-            for (auto it = price_tree_.begin(); it != price_tree_.end() && it->price() >= price; ++it) {
-                if (aQty <= it->totalQty()) {
-                    canFill = true;
+        for (auto* q = getQueue(); q != nullptr; q = getNextQueue(q->price())) {
+            if constexpr (P == PriceType::Bid) {
+                if (q->price() < price) {
                     break;
                 }
-                aQty -= it->totalQty();
-            }
-        } else {
-            // Ask tree is ascending (best = lowest). Accumulate from asks <= buy limit.
-            for (auto it = price_tree_.begin(); it != price_tree_.end() && it->price() <= price; ++it) {
-                if (aQty <= it->totalQty()) {
-                    canFill = true;
+            } else {
+                if (q->price() > price) {
                     break;
                 }
-                aQty -= it->totalQty();
             }
+            if (aQty <= q->totalQty()) {
+                canFill = true;
+                break;
+            }
+            aQty -= q->totalQty();
         }
 
         if (!canFill) {
@@ -148,12 +132,11 @@ Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const Post
         }
     }
 
-    orderQueue = getQueue();
     Decimal qtyLeft = qty;
 
     for (orderQueue = getQueue(); !qtyLeft.is_zero() && orderQueue != nullptr; orderQueue = getQueue()) {
         // Stop as soon as the best remaining queue price no longer satisfies the limit.
-        if constexpr (std::is_same_v<CompareType, CmpGreater>) {
+        if constexpr (P == PriceType::Bid) {
             if (orderQueue->price() < price) break;  // bid price fell below sell limit
         } else {
             if (orderQueue->price() > price) break;  // ask price rose above buy limit
@@ -167,28 +150,19 @@ Decimal PriceLevel<P>::processLimitOrder(const TradeNotification& tn, const Post
     return qtyProcessed;
 };
 
-template <PriceType P>
-OrderQueue* PriceLevel<P>::largestLessThan(const Decimal& price) {
-    auto it = price_tree_.lower_bound(price, PriceCompare());
-    if (it != price_tree_.begin()) {
-        --it;
-        return &(*it);
-    }
-    return nullptr;
+template <PriceType P, class Store>
+OrderQueue* PriceLevel<P, Store>::largestLessThan(const Decimal& price) {
+    return store_.below(price);
 }
 
-template <PriceType P>
-OrderQueue* PriceLevel<P>::smallestGreaterThan(const Decimal& price) {
-    auto it = price_tree_.upper_bound(price, PriceCompare());
-    if (it != price_tree_.end()) {
-        return &(*it);
-    }
-    return nullptr;
+template <PriceType P, class Store>
+OrderQueue* PriceLevel<P, Store>::smallestGreaterThan(const Decimal& price) {
+    return store_.above(price);
 }
 
-template <PriceType P>
+template <PriceType P, class Store>
 template <PriceType Q>
-OrderQueue* PriceLevel<P>::getNextQueue(const Decimal& price) {
+OrderQueue* PriceLevel<P, Store>::getNextQueue(const Decimal& price) {
     if constexpr (Q == PriceType::Bid) {
         return largestLessThan(price);
     } else if constexpr (Q == PriceType::Ask) {
@@ -198,19 +172,24 @@ OrderQueue* PriceLevel<P>::getNextQueue(const Decimal& price) {
     }
 }
 
-template class PriceLevel<PriceType::Bid>;
-template class PriceLevel<PriceType::Ask>;
+// --- Explicit instantiations for BOTH backends ------------------------------
+// PriceLevel methods stay in this TU (callback bodies + matching loops here) and
+// are explicitly instantiated for each (PriceType, Store) pair. Under LTO the
+// store calls within them inline; without LTO they inline within this TU.
 
-template Decimal PriceLevel<PriceType::Bid>::processMarketOrder<PriceType::Bid>(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID,
-                                                                                Decimal qty, Flag flag);
+#define INSTANTIATE_PRICELEVEL(P, STORE)                                                                                                              \
+    template class PriceLevel<P, STORE>;                                                                                                              \
+    template Decimal PriceLevel<P, STORE>::processMarketOrder<P>(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID,          \
+                                                                 Decimal qty, Flag flag);                                                             \
+    template Decimal PriceLevel<P, STORE>::processLimitOrder<P>(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID,           \
+                                                                Decimal price, Decimal qty, Flag flag);                                               \
+    template OrderQueue* PriceLevel<P, STORE>::getNextQueue<P>(const Decimal& price);
 
-template Decimal PriceLevel<PriceType::Ask>::processMarketOrder<PriceType::Ask>(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID,
-                                                                                Decimal qty, Flag flag);
+INSTANTIATE_PRICELEVEL(PriceType::Bid, ArrayLevels<PriceType::Bid>)
+INSTANTIATE_PRICELEVEL(PriceType::Ask, ArrayLevels<PriceType::Ask>)
+INSTANTIATE_PRICELEVEL(PriceType::Bid, RbTreeLevels<PriceType::Bid>)
+INSTANTIATE_PRICELEVEL(PriceType::Ask, RbTreeLevels<PriceType::Ask>)
 
-template Decimal PriceLevel<PriceType::Bid>::processLimitOrder<PriceType::Bid>(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID,
-                                                                               Decimal price, Decimal qty, Flag flag);
-
-template Decimal PriceLevel<PriceType::Ask>::processLimitOrder<PriceType::Ask>(const TradeNotification& tn, const PostOrderFill& pf, OrderID takerOrderID,
-                                                                               Decimal price, Decimal qty, Flag flag);
+#undef INSTANTIATE_PRICELEVEL
 
 }  // namespace orderbook

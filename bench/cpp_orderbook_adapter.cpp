@@ -376,7 +376,10 @@ void engine_init(uint64_t /*seed*/, const me_transport_t* transport, void* repor
     delete gBook;
     // Generous pools: the canonical workload has up to ~millions of orders;
     // the AdaptiveObjectPool grows on demand so these are just initial sizes.
-    gBook = new OrderBook<HarnessNotification>(gNotification, 1 << 16, 1 << 21);
+    // Tick-indexed price levels (perf/lever-b prototype): harness prices are
+    // integer ticks with fp = tick * 1e8, tick range ~1..54400.
+    //   base_fp = 0, tick_fp = 1e8, num_ticks = 65536.
+    gBook = new OrderBook<HarnessNotification>(gNotification, 1 << 16, 1 << 21, 16384, /*base_fp=*/0, /*tick_fp=*/100000000, /*num_ticks=*/1 << 16);
 }
 
 void engine_shutdown(void) {

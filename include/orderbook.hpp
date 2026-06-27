@@ -4,6 +4,8 @@
 #include <sstream>
 #include <utility>
 
+#include "array_levels.hpp"
+#include "level_store.hpp"
 #include "object_pool.hpp"
 #include "order_index.hpp"
 #include "pricelevel.hpp"
@@ -14,14 +16,19 @@ namespace orderbook {
 
 using OrderMap = index::FibHashIndex;
 
-template <class Notification>
+// Levels is the compile-time price-level container policy (a template over
+// PriceType). It defaults to ArrayLevels (tick array + bitmap); pass
+// RbTreeLevels to select the boost::intrusive::rbtree backend instead. The
+// selection is fully static, so there is no virtual dispatch on the hot path.
+template <class Notification, template <PriceType> class Levels = ArrayLevels>
 class OrderBook {
    public:
-    OrderBook(NotificationInterface<Notification>& n, size_t price_level_pool_size = 16384, size_t order_pool_size = 16384, size_t order_index_reserve = 16384)
+    OrderBook(NotificationInterface<Notification>& n, size_t price_level_pool_size = 16384, size_t order_pool_size = 16384, size_t order_index_reserve = 16384,
+              uint64_t base_fp = 0, uint64_t tick_fp = 100000000, size_t num_ticks = 1 << 16)
         : order_pool_(order_pool_size),
           notification_(static_cast<Notification&>(n)),
-          bids_(PriceLevel<PriceType::Bid>(price_level_pool_size)),
-          asks_(PriceLevel<PriceType::Ask>(price_level_pool_size)),
+          bids_(LevelStoreConfig{price_level_pool_size, base_fp, tick_fp, num_ticks}),
+          asks_(LevelStoreConfig{price_level_pool_size, base_fp, tick_fp, num_ticks}),
           orders_(order_index_reserve) {};
 
     void addOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
@@ -37,8 +44,8 @@ class OrderBook {
    private:
     pool::ObjectPool<Order> order_pool_;
 
-    PriceLevel<PriceType::Bid> bids_;
-    PriceLevel<PriceType::Ask> asks_;
+    PriceLevel<PriceType::Bid, Levels<PriceType::Bid>> bids_;
+    PriceLevel<PriceType::Ask, Levels<PriceType::Ask>> asks_;
 
     OrderMap orders_;
 
@@ -50,8 +57,8 @@ class OrderBook {
     void processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag);
 };
 
-template <class Notification>
-void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
+template <class Notification, template <PriceType> class Levels>
+void OrderBook<Notification, Levels>::addOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
     if (qty.is_zero()) [[unlikely]] {
         notification_.onExecutionReport(ExecutionReport{
             .exec_type = ExecType::Rejected,
@@ -149,8 +156,8 @@ void OrderBook<Notification>::addOrder(OrderID id, Type type, Side side, Decimal
     processOrder(id, type, side, qty, price, flag);
 }
 
-template <class Notification>
-void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
+template <class Notification, template <PriceType> class Levels>
+void OrderBook<Notification, Levels>::processOrder(OrderID id, Type type, Side side, Decimal qty, Decimal price, Flag flag) {
     const auto tradeNotification = [this](OrderID mOrderID, OrderID tOrderID, OrderStatus mOrderStatus, OrderStatus tOrderStatus, Decimal qty, Decimal price) {
         this->putTradeNotification(mOrderID, tOrderID, mOrderStatus, tOrderStatus, qty, price);
         this->last_price = price;
@@ -194,8 +201,8 @@ void OrderBook<Notification>::processOrder(OrderID id, Type type, Side side, Dec
     return;
 }
 
-template <class Notification>
-void OrderBook<Notification>::putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {
+template <class Notification, template <PriceType> class Levels>
+void OrderBook<Notification, Levels>::putTradeNotification(OrderID mOrderID, OrderID tOrderID, OrderStatus mStatus, OrderStatus tStatus, Decimal qty, Decimal price) {
     notification_.onExecutionReport(ExecutionReport{
         .exec_type = ExecType::Trade,
         .maker_order_id = mOrderID,
@@ -207,8 +214,8 @@ void OrderBook<Notification>::putTradeNotification(OrderID mOrderID, OrderID tOr
     });
 }
 
-template <class Notification>
-void OrderBook<Notification>::cancelOrder(OrderID id) {
+template <class Notification, template <PriceType> class Levels>
+void OrderBook<Notification, Levels>::cancelOrder(OrderID id) {
     auto [qty, original_qty] = eraseOrder(id);
     if (qty.is_zero()) {
         notification_.onExecutionReport(ExecutionReport{
@@ -233,8 +240,8 @@ void OrderBook<Notification>::cancelOrder(OrderID id) {
     });
 }
 
-template <class Notification>
-std::pair<Decimal, Decimal> OrderBook<Notification>::eraseOrder(OrderID id) {
+template <class Notification, template <PriceType> class Levels>
+std::pair<Decimal, Decimal> OrderBook<Notification, Levels>::eraseOrder(OrderID id) {
     auto* order = orders_.erase(id);
     if (order == nullptr) {
         return {uint64_t(0), uint64_t(0)};
@@ -252,37 +259,33 @@ std::pair<Decimal, Decimal> OrderBook<Notification>::eraseOrder(OrderID id) {
     return {qty, original_qty};
 }
 
-template <class Notification>
-bool OrderBook<Notification>::hasOrder(OrderID id) {
+template <class Notification, template <PriceType> class Levels>
+bool OrderBook<Notification, Levels>::hasOrder(OrderID id) {
     return orders_.contains(id);
 }
 
-template <class Notification>
-std::string OrderBook<Notification>::toString() {
+template <class Notification, template <PriceType> class Levels>
+std::string OrderBook<Notification, Levels>::toString() {
     std::stringstream ss;
 
-    const auto& bids = bids_.price_tree();
-    const auto& asks = asks_.price_tree();
+    // Best-first traversal of each side: bids high->low, asks low->high.
+    auto* b = bids_.getQueue();
+    auto* a = asks_.getQueue();
 
-    auto b = bids.begin();
-    auto a = asks.begin();
-
-    auto loop = (b != bids.end() || a != asks.end());
-    while (loop) {
-        if (b != bids.end()) {
+    while (b != nullptr || a != nullptr) {
+        if (b != nullptr) {
             ss << b->totalQty() << "\t" << b->price();
-            ++b;
+            b = bids_.getNextQueue(b->price());
         } else {
             ss << "\t\t\t";
         }
 
         ss << " | ";
-        if (a != asks.end()) {
+        if (a != nullptr) {
             ss << a->price() << "\t" << a->totalQty();
-            ++a;
+            a = asks_.getNextQueue(a->price());
         }
 
-        loop = (b != bids.end() || a != asks.end());
         ss << std::endl;
     }
 
