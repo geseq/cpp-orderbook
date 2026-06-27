@@ -98,9 +98,19 @@ for p in "$DECIMAL_INC" "$POOL_INC"; do
     fi
 done
 
+# --- Link-time optimization. This adapter is a perf/Release artifact, so it
+# gets -flto for cross-TU inlining of the matching chain. The single g++ call
+# below both compiles and links, so one -flto covers both phases. We DROP -flto
+# when ME_EXTRA_CXXFLAGS asks for a sanitizer build (ASan/UBSan/TSan), where LTO
+# is slow and can misbehave with the instrumentation.
+LTO_FLAG="-flto"
+case "${ME_EXTRA_CXXFLAGS:-}" in
+    *sanitize*) LTO_FLAG="" ;;
+esac
+
 # --- Compile the adapter + engine TUs into the .so. -------------------------
 OUT="$DIR/cpp_orderbook_adapter.so"
-g++ -std=c++20 -O3 -march=native -fPIC -shared \
+g++ -std=c++20 -O3 -march=native $LTO_FLAG -fPIC -shared \
     -I"$BENCH/api" \
     -I"$ENGINE/include" \
     -I"$ENGINE/src" \
