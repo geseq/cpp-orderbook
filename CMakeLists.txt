@@ -62,3 +62,18 @@ if (ENABLE_TESTING)
 endif()
 
 target_link_libraries(main PRIVATE ${CPP_ORDERBOOK} Boost::intrusive decimal pool)
+
+# --- Link-time optimization (LTO/IPO) for optimized builds only. ------------
+# Enabled only for Release-type configs and only when the toolchain supports
+# it. Debug builds and the sanitizer builds (ASan/UBSan/TSan) are left
+# untouched on purpose: LTO is slow under sanitizers and can misbehave. Note
+# the sanitizer CI builds the engine via bench/build.sh, not this CMake, so it
+# never reaches here; the gate below additionally keeps a Debug configure clean.
+include(CheckIPOSupported)
+check_ipo_supported(RESULT _ipo_ok OUTPUT _ipo_msg LANGUAGES CXX)
+if (_ipo_ok AND CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo|MinSizeRel)$")
+    set_property(TARGET ${CPP_ORDERBOOK} main PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    message(STATUS "LTO/IPO enabled for ${CMAKE_BUILD_TYPE} build")
+elseif (NOT _ipo_ok)
+    message(STATUS "LTO/IPO not supported by toolchain, continuing without it: ${_ipo_msg}")
+endif()
