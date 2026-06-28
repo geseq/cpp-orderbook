@@ -78,6 +78,8 @@ fi
 
 DECIMAL_INC="$BUILD_DIR/_deps/decimal-src/include"
 POOL_INC="$BUILD_DIR/_deps/pool-src/include"
+# geseq/cpp-fastchan: header-only SPSC channel backing engine_get_transport().
+FASTCHAN_INC="$BUILD_DIR/_deps/fastchan-src/include"
 # Boost from CPM is laid out as a super-project; its component headers live in
 # libs/<lib>/include. Collect every include dir so <boost/...> resolves.
 BOOST_SRC="$BUILD_DIR/_deps/boost-src"
@@ -90,7 +92,7 @@ fi
 # Fallback: a flattened boost include root, if present.
 [ -d "$BOOST_SRC/include" ] && BOOST_INCS+=("-I$BOOST_SRC/include")
 
-for p in "$DECIMAL_INC" "$POOL_INC"; do
+for p in "$DECIMAL_INC" "$POOL_INC" "$FASTCHAN_INC"; do
     if [ ! -d "$p" ]; then
         echo "error: dependency include dir missing: $p" >&2
         echo "       (CMake configure of $ENGINE did not populate _deps)" >&2
@@ -116,6 +118,7 @@ g++ -std=c++20 -O3 -march=native $LTO_FLAG -fPIC -shared \
     -I"$ENGINE/src" \
     -I"$DECIMAL_INC" \
     -I"$POOL_INC" \
+    -I"$FASTCHAN_INC" \
     "${BOOST_INCS[@]}" \
     "$DIR/cpp_orderbook_adapter.cpp" \
     "$ENGINE/src/pricelevel.cpp" \

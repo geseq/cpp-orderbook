@@ -41,12 +41,18 @@
 // (O(1), pre-sized once, single cold growth branch), and the hot handlers are
 // always-inlined.
 
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "matching_engine_api.h"
 #include "orderbook.hpp"
 #include "types.hpp"
+
+// Report transport backend: geseq/cpp-fastchan.
+#include "spsc.hpp"
 
 using orderbook::Decimal;
 using orderbook::ExecType;
@@ -353,6 +359,65 @@ HOT_INLINE void onModify(const modify_t* m) {
     e->alive = (residual > 0);
 }
 
+// ---------------------------------------------------------------------------
+// Single-producer / single-consumer report channel (geseq/cpp-fastchan).
+//
+// The report stream is carried by fastchan::SPSC<me_report_t, ...>, the
+// project owner's vetted header-only SPSC channel. me_report_t is a 64-byte
+// trivially-copyable POD, which is exactly what the channel's slot array
+// (std::array<T, N>) and value-copy put()/get() want.
+//
+// Modes: NonBlocking put + NonBlocking get.
+//   - put(value)        -> bool: false when full. tx_push maps that to 0 so
+//                          emit()'s pause-spin retries (matching the harness
+//                          "0 = full" push contract).
+//   - get()             -> std::optional<me_report_t>: nullopt when empty.
+//
+// Capacity is a COMPILE-TIME template parameter in cpp-fastchan (rounded up to
+// the next power of two), so the runtime `capacity` create() argument cannot be
+// honoured directly. kChanSize is fixed to a generous 1<<20 slots — the same
+// headroom the previous ring used. In perf mode a dedicated drainer thread runs
+// concurrently, so even if the harness requested a larger capacity the producer
+// only pause-spins briefly when momentarily full; it never deadlocks.
+//
+// FIFO + flush-publishes-tail: cpp-fastchan's put() does a release-store of the
+// producer index on EVERY call (it does not buffer a partial batch), so each
+// report is visible to the consumer as soon as it is enqueued and ordering is
+// strict FIFO. The tail is therefore always already published, and tx_flush()
+// is a no-op.
+// ---------------------------------------------------------------------------
+
+constexpr std::size_t kChanSize = std::size_t(1) << 20;  // compile-time capacity
+
+using ReportChan = fastchan::SPSC<me_report_t, kChanSize, fastchan::YieldWaitStrategy, fastchan::YieldWaitStrategy,
+                                  fastchan::ReturnMode::NonBlocking, fastchan::ReturnMode::NonBlocking>;
+
+void* tx_create(uint32_t /*capacity*/) { return new ReportChan(); }
+
+int tx_push(void* handle, const me_report_t* report) {
+    return static_cast<ReportChan*>(handle)->put(*report) ? 1 : 0;
+}
+
+uint32_t tx_drain(void* handle, me_report_t* out, uint32_t max) {
+    ReportChan* c = static_cast<ReportChan*>(handle);
+    uint32_t n = 0;
+    while (n < max) {
+        std::optional<me_report_t> v = c->get();
+        if (!v) [[unlikely]] {
+            break;
+        }
+        out[n++] = *v;
+    }
+    return n;
+}
+
+void tx_flush(void* /*handle*/) {
+    // cpp-fastchan's put() release-stores the producer index on every call, so
+    // the tail is already visible to the consumer — nothing to publish.
+}
+
+void tx_destroy(void* handle) { delete static_cast<ReportChan*>(handle); }
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -438,6 +503,11 @@ uint64_t engine_query_depth_at(int64_t price_ticks, uint8_t side) {
         }
     }
     return total;
+}
+
+const me_transport_t* engine_get_transport(void) {
+    static const me_transport_t T = {tx_create, tx_push, tx_drain, tx_flush, tx_destroy};
+    return &T;
 }
 
 void engine_on_batch(const me_msg_t* msgs, uint32_t n) {

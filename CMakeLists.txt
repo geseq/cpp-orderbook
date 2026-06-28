@@ -32,6 +32,15 @@ set(Boost_USE_STATIC_RUNTIME OFF)
 CPMAddPackage( NAME Boost VERSION 1.80.0 GITHUB_REPOSITORY "boostorg/boost" GIT_TAG "boost-1.80.0")
 CPMAddPackage( NAME decimal VERSION 2.1.0 GITHUB_REPOSITORY "geseq/cpp-decimal" GIT_TAG "v2.1.0")
 CPMAddPackage( NAME pool VERSION 0.6.1 GITHUB_REPOSITORY "geseq/cpp-pool" GIT_TAG "v0.5.0")
+# cpp-fastchan defaults its own ENABLE_TESTING=ON and shares that option name
+# with us, so add_subdirectory'ing it would pull its (slow) test suite into our
+# ctest. Force ENABLE_TESTING OFF just for fastchan's configure, then restore our
+# value for our own test block below. (We use add_subdirectory, not DOWNLOAD_ONLY,
+# so _deps/fastchan-src/include is populated for the bench adapter build.)
+set(_ob_enable_testing_save "${ENABLE_TESTING}")
+set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+CPMAddPackage( NAME fastchan GITHUB_REPOSITORY "geseq/cpp-fastchan" GIT_TAG "main")
+set(ENABLE_TESTING "${_ob_enable_testing_save}" CACHE BOOL "" FORCE)
 
 include_directories(decimal_SOURCE_DIR)
 include_directories(pool_SOURCE_DIR)
