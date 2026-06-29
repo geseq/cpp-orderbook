@@ -44,6 +44,35 @@ OrderBook<Notification>
 | `NotificationInterface<N>` | `include/types.hpp` | CRTP base — implement `putOrder` and `putTrade` for callbacks |
 | `Decimal` (`decimal::U8`) | `include/types.hpp` | Fixed-point type with 8 decimal places |
 
+## Benchmarks
+
+Measured on a **12th Gen Intel Core i7-1260P**, Release + LTO, best-of-N runs with threads pinned to distinct physical P-cores. These are single-machine figures; hosted-CI numbers are lower and not comparable (shared, un-pinned runners).
+
+### Matching-engine-benchmark
+
+Run through the [matching-engine-benchmark](https://github.com/flash1-dev/matching-engine-benchmark) harness (pinned `77697a1`), 1M orders per scenario, `--mode perf`, `--matcher-core 2 --drainer-core 4`. The adapter supplies a [`geseq/cpp-fastchan`](https://github.com/geseq/cpp-fastchan) SPSC report transport via the harness's `engine_get_transport()` hook. Every scenario's report stream is byte-identical to the harness's three-engine consensus reference (correctness: PASS).
+
+| Scenario | Throughput (M msgs/s) | Correctness |
+|---|---|---|
+| static | 18.3 | PASS |
+| normal | 18.5 | PASS |
+| swing-25 | 17.6 | PASS |
+| swing-40 | 17.6 | PASS |
+| flash-crash | 17.0 | PASS |
+
+The harness is transport-bound on the report queue: replacing the default `boost::lockfree::spsc_queue` with cpp-fastchan lifts end-to-end throughput ~22–32% (the engine itself runs well above these figures; see below).
+
+### Throughput (deep-book add/cancel)
+
+`main -n throughput -depth 50000` — a sliding window of 50,000 resting orders with monotonically increasing ids (no crossing), exercising the pure add/cancel/index/pool path with no transport in the loop:
+
+| Metric | Value |
+|---|---|
+| Throughput | ~41 M ops/s |
+| Latency | ~24 ns/op |
+
+Numbers vary with hardware and machine load.
+
 ## Prerequisites
 
 - C++20-capable compiler (GCC ≥ 12 or Clang ≥ 15 recommended)
